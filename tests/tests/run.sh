@@ -29,11 +29,11 @@ for i in $OKFILES ; do
 	timeout=$((timeout+1));
 	echo -e "\033[0;33mTIMEOUT\033[0m";
     else
-	if echo $ret | grep "SAT" > /dev/null;
+	if echo $ret | grep "true" > /dev/null;
 	then
 	    pass=$((pass+1));
 	    echo -e "\033[0;32mSUCCESS\033[0m"
-	elif echo $ret | grep "UNSAT" > /dev/null;
+	elif echo $ret | grep "false" > /dev/null;
 	then
 	    wrong=$((wrong+1));
 	    echo -e "\033[0;31mWRONG\033[0m";
@@ -57,11 +57,11 @@ for i in $KOFILES ; do
 	timeout=$((timeout+1));
 	echo -e "\033[0;33mTIMEOUT\033[0m";
     else
-	if echo $ret | grep "SAT" > /dev/null;
+	if echo $ret | grep "true" > /dev/null;
 	then
 	    wrong=$((wrong+1));
 	    echo -e "\033[0;31mWRONG\033[0m";
-	elif echo $ret | grep "UNSAT" > /dev/null;
+	elif echo $ret | grep "false" > /dev/null;
 	then
 	    pass=$((pass+1));
 	    echo -e "\033[0;32mSUCCESS\033[0m"
