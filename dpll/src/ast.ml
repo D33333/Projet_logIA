@@ -7,12 +7,16 @@ type model = int list
 module Clause = Set.Make(
   struct type t = lit
 
-    let compare x y =
-      if abs x == abs y then (compare y x)
-      else if abs x > abs y then 1 else -1
-  end)
+  let compare x y =
+    if abs x == abs y then 0
+    else if abs x > abs y then 1 else -1
+end)
 
-module Cnf = Set.Make(struct type t = Clause.t let compare = Clause.compare end)
+module Cnf = Set.Make(
+  struct type t = Clause.t
+
+  let compare = Clause.compare 
+end)
 
 type t = {
   nb_var: int;

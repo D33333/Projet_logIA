@@ -1,4 +1,3 @@
-
 let parse_lexbuf : string -> Lexing.lexbuf -> Ast.t = fun fname lexbuf ->
   LexerDimacs.filename := fname;
   try

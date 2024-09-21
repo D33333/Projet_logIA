@@ -73,8 +73,8 @@ for i in $KOFILES ; do
 done;
 
 echo "------------------------"
-echo -e "\033[0;31mWrong  : $wrong / $TOTAL\033[0m"
-echo -e "\033[0;32mPass   : $pass / $TOTAL\033[0m"
-echo -e "\033[0;33mTimeout: $timeout / $TOTAL\033[0m"
-echo -e "\033[0;36mFail   : $fail / $TOTAL\033[0m"
+echo -e "\033[0;31mWrong  : $wrong / $TOTALKO\033[0m"
+echo -e "\033[0;32mPass   : $pass / $TOTALOK\033[0m"
+echo -e "\033[0;33mTimeout (pas mis à jour): $timeout / $TOTAL\033[0m"
+echo -e "\033[0;36mFail (pas mis à jour): $fail / $TOTAL\033[0m"
 exit 0
