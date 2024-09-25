@@ -67,7 +67,7 @@ let to_cnf : t -> env * Ast.t = fun sudoku ->
   let ast = {Ast.nb_var = 729; Ast.nb_clause = 3240 + List.length sudoku; Ast.cnf = cnf} in
   (0, ast)
 
-let solution_of : env -> Ast.model -> t = fun env model ->
+let solution_of : env -> Ast.model -> t = fun _ model ->
   List.map (fun x -> if x mod 9 == 0 then 9 else x mod 9) (List.sort (-) (List.filter (fun x -> x > 0) model))
 
 let grid_of_str : string -> t = fun str ->

@@ -4,7 +4,7 @@ end
 
 module DefaultChoice =
 struct
-  let choice : Ast.Cnf.t -> Ast.var = fun cnf -> failwith "todo: choice"
+  let choice : Ast.Cnf.t -> Ast.var = fun _ -> failwith "todo: choice"
 end
 
 module type SOLVER = sig
@@ -32,7 +32,7 @@ struct
       assignment = literal :: instance.assignment;
       unbound = LitSet.remove (abs literal) instance.unbound }
 
-  let rec unit_propagate (instance: instance): Ast.model =
+  let unit_propagate (instance: instance): Ast.model =
     let unit_clause = Ast.Clause.fold (fun x y -> x :: y)
     in Ast.Cnf.fold unit_clause (Ast.Cnf.filter (fun clause -> (Ast.Clause.cardinal clause) == 1) instance.ast.cnf) []
 
@@ -50,7 +50,7 @@ struct
         (* Check if there is a literal that occurs pure in formula *)
         match pure_literal instance with
         | [] -> instance
-        | literals -> simplify (List.fold_left assign_literal instance (pure_literal instance))
+        | _ -> simplify (List.fold_left assign_literal instance (pure_literal instance))
       end
     | literals -> simplify (List.fold_left assign_literal instance literals)
 
