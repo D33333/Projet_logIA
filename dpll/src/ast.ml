@@ -26,6 +26,23 @@ type t = {
 
 let neg var = -var
 
+type lab_clause = {
+  c: Clause.t;
+  label: int
+}
+
+module Lab_Cnf = Set.Make(
+  struct type t = lab_clause
+
+  let compare c1 c2 = Clause.compare c1.c c2.c
+end)
+
+type lab_t = {
+  nb_var_l: int;
+  nb_clause_l: int;
+  cnf_l: Lab_Cnf.t
+}
+
 type 'a printer = Format.formatter -> 'a -> unit
 
 let pp_clause : Clause.t printer = fun fmt clause ->
