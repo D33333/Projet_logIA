@@ -51,7 +51,7 @@ module CDCL (C:CHOICE) : SOLVER =
           | _ -> list
         in filter_pure_literal (Ast.Clause.elements (Ast.Cnf.fold Ast.Clause.union instance.ast.cnf Ast.Clause.empty))
 
-      let rec simplify (instance: instance): instance =
+      let rec simplify (instance: instance) : instance =
         (* Check if there is a unit clause in formula or pure: Unit Propagation *)
         match unit_propagate instance with
         | [] -> begin
@@ -73,17 +73,28 @@ module CDCL (C:CHOICE) : SOLVER =
       | (lit,preds,dl')::reste -> if (dl' < dl) then go_back_to dl reste
       else (lit,preds,dl')::(go_back_to dl reste)
 
-    let rec find_preds_of_empty (dstack : history) : nodeHistory = match dstack with
-    | (lit, preds, dl)::reste -> 
-    | _ -> failwith "There is no node in the stack."
+    let rec find_preds_of_bottom (dstack : history) : Ast.Clause.t option = match dstack with
+    | (-1, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
+    | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
+    | _ -> failwith "There is no empty clause in the stack."
 
-    (*let analyzeConflict (instance : instance) : Clause,int = *)
+    let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
+    | [] -> return false
+    | x::reste -> (x=literal) || (contains_literal reste literal)
+    
+    let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
+    | [] -> dstack
+    | -1::reste -> (-1, ???, -1)::(add dstack dl reste)
+    | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
+    else (literal, ???, dl)::(add dstack dl reste)
+
+    let analyzeConflict (instance : instance) : Clause,int = let predsBottom = find_preds_of_bottom instance.decisions in ...
 
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
       let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0 } in
-      
+
       let noAssignment = true in
       while (noAssignment) do
 
@@ -107,7 +118,7 @@ module CDCL (C:CHOICE) : SOLVER =
         
         (*Boolean Decision*)
         if (f_unassigned_under_m instance) then {
-          (*instance.decisions = ???*)
+          instance.history = add instance.history dl instance.assignment
           instance.dl+=1
           instance.assignment = make_decision(instance)
           instance = simplify instance
