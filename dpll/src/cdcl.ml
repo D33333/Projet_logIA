@@ -27,6 +27,7 @@ module CDCL (C:CHOICE) : SOLVER =
           nb_clause_l = f.nb_clause;
           cnf_l = label_aux (Ast.Cnf.elements f.cnf) 0
         }
+    
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS UNITAIRES *)
     (*-----------------------------------------------------------------------------------------------------------------*)
@@ -38,7 +39,6 @@ module CDCL (C:CHOICE) : SOLVER =
     let max (x:int) (y:int) : int = if (x>y) then x else y
 
     let f_false_under_m (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.is_empty instance.ast.cnf
-    (*let F_unassigned (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.unassigned instance.ast.cnf*)
     let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
     let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
 
