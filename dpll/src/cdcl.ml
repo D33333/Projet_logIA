@@ -4,6 +4,7 @@ module CDCL (C:CHOICE) : SOLVER =
   struct
     module S = DPLL(C)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
+
     type history = (Ast.lit * (Ast.lit list) * int) list
     type instance = {
       ast : Ast.lab_t;
@@ -33,11 +34,13 @@ module CDCL (C:CHOICE) : SOLVER =
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
       let cnf =
+
         let assign_clause (clause: lab_clause) (cnf: Ast.Lab_Cnf.t) = (* a modifier *)
           if Ast.Clause.mem literal clause.c then cnf
           else Ast.Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
         in Ast.Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
       { ast = { instance.ast with cnf };
+
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
@@ -97,6 +100,67 @@ module CDCL (C:CHOICE) : SOLVER =
           end
         | literals -> simplify (List.fold_left assign_literal instance literals) *)
 
-    let rec solve_sat (instance : instance) : answer = 
-    let solve (f : Ast.t) : Ast.model option =
-  end
+
+    let f_false_under_m (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.is_empty instance.ast.cnf
+    (*let F_unassigned (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.unassigned instance.ast.cnf*)
+    let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
+    let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
+    
+    let rec go_back_to (dl : int) (dstack : history ) : history = match dstack with
+      | [] -> []
+      | (lit,preds,dl')::reste -> if (dl' < dl) then go_back_to dl reste
+      else (lit,preds,dl')::(go_back_to dl reste)
+
+    let rec find_preds_of_bottom (dstack : history) : Ast.Clause.t option = match dstack with
+    | (-1, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
+    | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
+    | _ -> failwith "There is no empty clause in the stack."
+
+    let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
+    | [] -> return false
+    | x::reste -> (x=literal) || (contains_literal reste literal)
+    
+    let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
+    | [] -> dstack
+    | -1::reste -> (-1, ???, -1)::(add dstack dl reste)
+    | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
+    else (literal, ???, dl)::(add dstack dl reste)
+
+    let analyzeConflict (instance : instance) : Clause,int = let predsBottom = find_preds_of_bottom instance.decisions in ...
+
+    let solve (f : Ast.t) : answer = 
+      let range = List.init f.nb_var (fun x -> x + 1) in
+      let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
+      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0 } in
+
+      let noAssignment = true in
+      while (noAssignment) do
+
+        (*Backtracking*)
+        while (f_false_under_m instance) do
+          if (instance.dl=0) then Unsat else
+          let clauseToLearn,dl = analyzeConflict instance
+
+          (*Backtrack*)
+          instance.dl = dl
+          (*instance.ast = ...
+          instance.assignment = ...
+          instance.unbound = ...*)
+          instance.decisions = go_back_to dl instance.decisions
+
+          (*Clause Learning*)
+          f.nb_clause+=1
+          f.cnf = Cnf.of_list [f.cnf,Cnf.singleton(clauseToLearn)]
+          instance = simplify instance
+          done
+        
+        (*Boolean Decision*)
+        if (f_unassigned_under_m instance) then {
+          instance.history = add instance.history dl instance.assignment
+          instance.dl+=1
+          instance.assignment = make_decision(instance)
+          instance = simplify instance
+        }
+        noAssignment = f_unassigned_under_m instance || f_false_under_m instance
+        done
+    end
