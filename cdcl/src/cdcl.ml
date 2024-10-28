@@ -1,5 +1,7 @@
 open Dpll
 
+(* label ! *)
+
 module CDCL (C:CHOICE) : SOLVER =
   struct
     module S = DPLL(C)
@@ -11,7 +13,7 @@ module CDCL (C:CHOICE) : SOLVER =
       unbound : S.LitSet.t;
       decisions : history;
       dl : int;
-      oldFormulas : (int * Ast.Cnf) list
+      oldFormulas : (int * Ast.Cnf.t) list
     }
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS POUR LE LABELING *)
@@ -31,7 +33,7 @@ module CDCL (C:CHOICE) : SOLVER =
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS UNITAIRES *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let valid (clause : Ast.lab_clause.c) : bool = Ast.lab_clause.c.exists (fun x->x>0) clause
+    let valid (clause : Ast.lab_clause) : bool = Ast.Clause.exists (fun x->x>0) clause.c
 
     let new_dl (instance : instance) (predecessors : Ast.lit list) : int = 
       match predecessors with 
@@ -67,13 +69,13 @@ module CDCL (C:CHOICE) : SOLVER =
     | lit::autres -> let max = max_vars autres in if ((abs lit) > max) then (abs lit)
     else max
     
-    let rec count_vars (formula : Ast.lab_clause.c list) : int = match formula with
+    let rec count_vars (formula : Ast.lab_clause list) : int = match formula with
     | [] -> 0
-    | clause::reste -> let max1 = max_vars (Ast.lab_clause.c.to_list clause) in
+    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause.c) in
     let max2 = count_vars reste in if (max1 > max2) then max1
     else max2
     
-    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Lab_Cnf) list) : Ast.lab_t = match oldFormulas with
+    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Lab_Cnf.t) list) : Ast.lab_t = match oldFormulas with
     | [] -> failwith "Invalid level of decision"
     | (dl', formula)::reste -> if (dl' = dl) then 
       {
@@ -83,9 +85,9 @@ module CDCL (C:CHOICE) : SOLVER =
       }
     else find_old_formula dl reste
 
-    let add (formula : Ast.lab_t) (clause : Ast.lab_clause.c) : Ast.lab_t = 
+    let add (formula : Ast.lab_t) (clause : Ast.lab_clause) : Ast.lab_t = 
       {
-        nb_var_l = max (count_vars formula.cnf_l) (count_vars clause);
+        nb_var_l = max (count_vars Ast.Lab_Cnf.to_list formula.cnf_l) (count_vars clause::[]);
         nb_clause_l = (Ast.Lab_Cnf.cardinal formula.cnf_l) + 1 ;
         cnf_l = Ast.Lab_Cnf.add clause formula.cnf_l
       }
@@ -149,7 +151,7 @@ module CDCL (C:CHOICE) : SOLVER =
       | _ -> let assign_pure = fun i l -> assign_literal i l [] 
         in simplify (List.fold_left assign_pure instance literals)
     
-    let rec go_back_to (dl : int) (dstack : history) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : S.LitSet.t) : history * S.LitSet.t = match dstack with
       | [] -> [],unbound
       | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste in
       if (dl' > dl) then dstack',(S.LitSet.add lit unbound')
@@ -180,14 +182,14 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
-    let analyzeConflict (instance : instance) : Ast.lab_clause.c,int = 
+    let analyzeConflict (instance : instance) : Ast.lab_clause * int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
       | lit::reste -> let conflict = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
         let maxDl = findMaxDl conflict instance.decisions in
         let rec createClauseToLearn conflit = match conflit with
-          | [] -> Ast.lab_clause.c.empty
-          | lit::reste -> Ast.lab_clause.c.add (Ast.neg lit) (createClauseToLearn reste) in
+          | [] -> Ast.Clause.empty
+          | lit::reste -> Ast.Clause.add (Ast.neg lit) (createClauseToLearn reste) in
           (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
@@ -195,7 +197,7 @@ module CDCL (C:CHOICE) : SOLVER =
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
     let solve (formulaInit : Ast.t) : answer = 
-      let f = label formulaInit
+      let f = label formulaInit in
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
       let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0; oldFormulas = [] } in
@@ -206,27 +208,26 @@ module CDCL (C:CHOICE) : SOLVER =
         (*Backtracking*)
         while (f_false_under_m instance) do
           if (instance.dl=0) then Unsat else
-          let clauseToLearn,dl = analyzeConflict instance
-
+          let clauseToLearn,dl = analyzeConflict instance in
           (*Backtrack*)
-          instance.dl = dl
-          instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound
-          instance.assignment = update_model instance.decisions
-          instance.ast = find_old_formula dl instance.oldFormulas
+          instance.dl = dl ;
+          instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound ;
+          instance.assignment = update_model instance.decisions ;
+          instance.ast = find_old_formula dl instance.oldFormulas ;
 
           (*Clause Learning*)
-          f.nb_clause_l+=1
-          f.cnf_l = Ast.Lab_Cnf.add clauseToLearn f.cnf_l
-          instance.ast = add instance.ast clauseToLearn
+          f.nb_clause_l+=1 ;
+          f.cnf_l = Ast.Lab_Cnf.add clauseToLearn f.cnf_l ;
+          instance.ast = add instance.ast clauseToLearn ;
           instance = simplify instance
-          done
+          done ;
         
         (*Boolean Decision*)
-        if (f_unassigned_under_m instance) then {
-          instance.dl+=1
-          instance = make_decision(instance) (*S'assurer que met bien à jour instance.oldFormulas*)
+        if (f_unassigned_under_m instance) then begin
+          instance.dl+=1 ;
+          instance = make_decision(instance) ; (*S'assurer que met bien à jour instance.oldFormulas*)
           instance = simplify instance
-        }
+        end ;
         noAssignment = f_unassigned_under_m instance || f_false_under_m instance
         done
     end
