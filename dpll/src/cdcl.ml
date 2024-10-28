@@ -68,13 +68,14 @@ module CDCL (C:CHOICE) : SOLVER =
     let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
     let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
     
-    let rec go_back_to (dl : int) (dstack : history ) : history = match dstack with
-      | [] -> []
-      | (lit,preds,dl')::reste -> if (dl' < dl) then go_back_to dl reste
-      else (lit,preds,dl')::(go_back_to dl reste)
+    let rec go_back_to (dl : int) (dstack : history ) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
+      | [] -> [],unbound
+      | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste in
+      if (dl' > dl) then dstack',(S.LitSet.add lit unbound')
+      else (lit,preds,dl')::dstack',unbound'
 
     let rec find_preds_of_bottom (dstack : history) : Ast.Clause.t option = match dstack with
-    | (-1, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
+    | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
     | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
     | _ -> failwith "There is no empty clause in the stack."
 
@@ -82,13 +83,27 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> return false
     | x::reste -> (x=literal) || (contains_literal reste literal)
     
-    let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
+    (*let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
     | [] -> dstack
     | -1::reste -> (-1, ???, -1)::(add dstack dl reste)
     | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
-    else (literal, ???, dl)::(add dstack dl reste)
+    else (literal, ???, dl)::(add dstack dl reste)*)
 
-    let analyzeConflict (instance : instance) : Clause,int = let predsBottom = find_preds_of_bottom instance.decisions in ...
+    let rec remove (dstack : history) : Ast.model = match dstack with
+    | [] -> []
+    | (lit, preds, dl)::reste -> lit::(remove reste)
+
+    let findParentConflict (conflictLit : lit list) (dstack : history) : (lit list),int = ...
+
+    let analyzeConflict (instance : instance) : Clause,int = 
+      let predsBottom = find_preds_of_bottom instance.decisions in
+      match predsBottom with
+      | lit::reste -> let conflict,maxDl = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
+        let rec createClauseToLearn conflit = match conflit with
+          | [] -> Clause.empty
+          | lit::reste -> Clause.add (Ast.neg lit) (createClauseToLearn reste) in
+          (createClauseToLearn conflict),maxDl
+      | _ ->  failwith "Error in the implication graph"
 
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
@@ -105,10 +120,9 @@ module CDCL (C:CHOICE) : SOLVER =
 
           (*Backtrack*)
           instance.dl = dl
-          (*instance.ast = ...
-          instance.assignment = ...
-          instance.unbound = ...*)
-          instance.decisions = go_back_to dl instance.decisions
+          instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound
+          instance.assignment = remove instance.decisions
+          instance.ast = (*Recup ce qu'il y a dans instance.decisions à ce niveau là*)
 
           (*Clause Learning*)
           f.nb_clause+=1
@@ -118,9 +132,8 @@ module CDCL (C:CHOICE) : SOLVER =
         
         (*Boolean Decision*)
         if (f_unassigned_under_m instance) then {
-          instance.history = add instance.history dl instance.assignment
           instance.dl+=1
-          instance.assignment = make_decision(instance)
+          instance = make_decision(instance)
           instance = simplify instance
         }
         noAssignment = f_unassigned_under_m instance || f_false_under_m instance
