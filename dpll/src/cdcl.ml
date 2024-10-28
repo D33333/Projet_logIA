@@ -38,21 +38,21 @@ module CDCL (C:CHOICE) : SOLVER =
 
     let max (x:int) (y:int) : int = if (x>y) then x else y
 
-    let f_false_under_m (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.is_empty instance.ast.cnf
-    let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
-    let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
+    let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists Ast.lab_clause.c.is_empty instance.ast.cnf
+    let f_true_under_m (instance : instance) : bool = Ast.Lab_Cnf.for_all Ast.lab_clause.c.valid instance.ast.cnf
+    let f_unassigned_under_m (instance : instance) : bool = !(f_false_under_m instance) && !(f_true_under_m instance)
 
-    let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
+    let rec contains_literal (dstack : history) (literal : lit) : bool = match dstack with
     | [] -> return false
     | x::reste -> (x=literal) || (contains_literal reste literal)
 
-    let rec contains (litList : lit list) (literal : lit) : Boolean = match litList with
+    let rec contains (litList : lit list) (literal : lit) : bool = match litList with
     | [] -> false
     | lit::reste -> if (literal=lit) then true else contains reste literal
 
-    let rec remove (dstack : history) : Ast.model = match dstack with
+    let rec update_model (dstack : history) : Ast.model = match dstack with
     | [] -> []
-    | (lit, preds, dl)::reste -> lit::(remove reste)
+    | (lit, preds, dl)::reste -> lit::(update_model reste)
 
     let rec findMaxDl (preds : lit list) (dstack : history) : int = match dstack with
     | [] -> 0
@@ -65,22 +65,27 @@ module CDCL (C:CHOICE) : SOLVER =
     | lit::autres -> let max = max_vars autres in if ((abs lit) > max) then (abs lit)
     else max
     
-    let rec count_vars (formula : Ast.Clause list) : int = match formula with
+    let rec count_vars (formula : Ast.lab_clause.c list) : int = match formula with
     | [] -> 0
-    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause) in
+    | clause::reste -> let max1 = max_vars (Ast.lab_clause.c.to_list clause) in
     let max2 = count_vars reste in if (max1 > max2) then max1
     else max2
     
-    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Cnf) list) : Ast.lab_t = match oldFormulas with
+    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Lab_Cnf) list) : Ast.lab_t = match oldFormulas with
     | [] -> failwith "Invalid level of decision"
-    | (dl', formula)::reste -> if (dl' = dl) then {nb_var_l = count_vars (Ast.Cnf.to_list formula); nb_clause_l = Ast.Cnf.cardinal formula; cnf_l = formula }
+    | (dl', formula)::reste -> if (dl' = dl) then 
+      {
+        nb_var_l = count_vars (Ast.Lab_Cnf.to_list formula);
+        nb_clause_l = Ast.Lab_Cnf.cardinal formula;
+        cnf_l = formula
+      }
     else find_old_formula dl reste
 
-    let add (formula : Ast.t) (clause : Ast.Clause.t) : Ast.t = 
+    let add (formula : Ast.lab_t) (clause : Ast.lab_clause.c) : Ast.lab_t = 
       {
-        nb_var = max (count_vars formula) (count_vars clause);
-        nb_clause = (Ast.Cnf.cardinal formula) + 1 ;
-        cnf = Ast.Cnf.add clause formula
+        nb_var_l = max (count_vars formula.cnf_l) (count_vars clause);
+        nb_clause_l = (Ast.Lab_Cnf.cardinal formula.cnf_l) + 1 ;
+        cnf_l = Ast.Lab_Cnf.add clause formula.cnf_l
       }
     
     (*-----------------------------------------------------------------------------------------------------------------*)
@@ -135,7 +140,6 @@ module CDCL (C:CHOICE) : SOLVER =
         | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
       in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
     
-
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
       let literals = pure_literals instance in
       match literals with
@@ -143,13 +147,13 @@ module CDCL (C:CHOICE) : SOLVER =
       | _ -> let assign_pure = fun i l -> assign_literal i l [] 
         in simplify (List.fold_left assign_pure instance literals)
     
-    let rec go_back_to (dl : int) (dstack : history ) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
       | [] -> [],unbound
       | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste in
       if (dl' > dl) then dstack',(S.LitSet.add lit unbound')
       else (lit,preds,dl')::dstack',unbound'
 
-    let rec find_preds_of_bottom (dstack : history) : Ast.Clause.t option = match dstack with
+    let rec find_preds_of_bottom (dstack : history) : (lit list) = match dstack with
     | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
     | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
     | _ -> failwith "There is no empty clause in the stack."
@@ -174,22 +178,23 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
-    let analyzeConflict (instance : instance) : Clause,int = 
+    let analyzeConflict (instance : instance) : Ast.lab_clause.c,int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
       | lit::reste -> let conflict = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
         let maxDl = findMaxDl conflict instance.decisions in
         let rec createClauseToLearn conflit = match conflit with
-          | [] -> Clause.empty
-          | lit::reste -> Clause.add (Ast.neg lit) (createClauseToLearn reste) in
+          | [] -> Ast.lab_clause.c.empty
+          | lit::reste -> Ast.lab_clause.c.add (Ast.neg lit) (createClauseToLearn reste) in
           (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let solve (f : Ast.t) : answer = 
-      let range = List.init f.nb_var (fun x -> x + 1) in
+    let solve (formulaInit : Ast.t) : answer = 
+      let f = label formulaInit
+      let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
       let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0; oldFormulas = [] } in
 
@@ -204,12 +209,12 @@ module CDCL (C:CHOICE) : SOLVER =
           (*Backtrack*)
           instance.dl = dl
           instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound
-          instance.assignment = remove instance.decisions
+          instance.assignment = update_model instance.decisions
           instance.ast = find_old_formula dl instance.oldFormulas
 
           (*Clause Learning*)
-          f.nb_clause+=1
-          f.cnf = Ast.Cnf.add clauseToLearn f.cnf
+          f.nb_clause_l+=1
+          f.cnf_l = Ast.Lab_Cnf.add clauseToLearn f.cnf_l
           instance.ast = add instance.ast clauseToLearn
           instance = simplify instance
           done
