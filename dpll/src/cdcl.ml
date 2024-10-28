@@ -62,7 +62,7 @@ module CDCL (C:CHOICE) : SOLVER =
       | [] -> []
       | (literal,label)::t ->
         let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) instance.ast.cnf_l)
-        in Ast.Clause.elements (Ast.Clause.remove literal clause.c)
+        in List.map Ast.neg Ast.Clause.elements (Ast.Clause.remove literal clause.c)
     
     (* A AJOUTER PLUS TARD
 
