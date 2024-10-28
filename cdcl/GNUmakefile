@@ -14,8 +14,8 @@ all: build
 build:
 	dune build --profile release
 
-dpll: build
-	ln -s _build/install/default/bin/dpll dpll || true
+cdcl: build
+	ln -s _build/install/default/bin/cdcl cdcl || true
 
 .PHONY: doc
 doc:
@@ -31,16 +31,16 @@ SUDOKUSTART=0
 NSUDOKU=10
 
 #################
-#      DPLL     #
+#      CDCL     #
 #################
 
 
 .PHONY: tests
-tests: build dpll
+tests: build cdcl
 	./tests/run.sh $(TIMEOUT)
 
 .PHONY: tests_new
-tests_new: build dpll
+tests_new: build cdcl
 	./tests/run_new.sh $(TIMEOUT)
 
 #################
@@ -48,5 +48,5 @@ tests_new: build dpll
 #################
 
 .PHONY: sudoku
-sudoku: build dpll
+sudoku: build cdcl
 	./sudoku/run.sh $(TIMEOUT) $(SUDOKUSTART) $(NSUDOKU)

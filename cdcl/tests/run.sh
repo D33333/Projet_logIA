@@ -13,7 +13,7 @@ TOTALOK=$(wc -w <<< "$OKFILES")
 TOTALKO=$(wc -w <<< "$KOFILES")
 TOTAL=$((TOTALOK+TOTALKO))
 TIMEOUT=$1
-CMD="timeout $TIMEOUT ./dpll"
+CMD="timeout $TIMEOUT ./cdcl"
 
 
 echo ""

@@ -10,9 +10,6 @@ module Clause = Set.Make(
   let compare x y =
     if abs x == abs y then 0
     else if abs x > abs y then 1 else -1
-  
-  let valid clause = exists (fun x->x==1) clause
-  (*let unassigned clause = !clause.is_empty() && !(exists (fun x->x==1) clause) && exists (fun x->x==0) clause*)
 end)
 
 module Cnf = Set.Make(

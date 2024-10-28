@@ -9,9 +9,14 @@ type model = int list
 
 (** A set of variables *)
 module Clause : Set.S with type elt = var
+type lab_clause = {
+  c: Clause.t;
+  label: int
+}
 
 (** A set of clauses *)
 module Cnf : Set.S with type elt = Clause.t
+module Lab_Cnf : Set.S with type elt = lab_clause
 
 (** A cnf problem *)
 type t =
@@ -19,6 +24,13 @@ type t =
     nb_var : int; (** number of variables *)
     nb_clause : int; (** number of clauses *)
     cnf : Cnf.t (** the cnf formula *)
+  }
+
+type lab_t =
+  {
+    nb_var_l: int;
+    nb_clause_l: int;
+    cnf_l: Lab_Cnf.t
   }
 
 (** [neg v] returns the opposite litteral *)

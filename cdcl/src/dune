@@ -12,6 +12,6 @@
 
 (executable
 	(name main)
-	(public_name dpll)
+	(public_name cdcl)
 	(libraries menhirLib)
-	(package dpll))
+	(package cdcl))

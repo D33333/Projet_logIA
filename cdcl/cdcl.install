@@ -1,0 +1,7 @@
+lib: [
+  "_build/install/default/lib/cdcl/META" {"META"}
+  "_build/install/default/lib/cdcl/opam" {"opam"}
+]
+bin: [
+  "_build/install/default/bin/cdcl" {"cdcl"}
+]
