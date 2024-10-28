@@ -195,7 +195,7 @@ module CDCL (C:CHOICE) : SOLVER =
           (*Clause Learning*)
           f.nb_clause+=1
           f.cnf = Cnf.of_list [f.cnf,Cnf.singleton(clauseToLearn)]
-          instance.ast = 
+          instance.ast = //TODO......
           instance = simplify instance
           done
         
