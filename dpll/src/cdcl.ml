@@ -134,6 +134,10 @@ module CDCL (C:CHOICE) : SOLVER =
     let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
     | [] -> return false
     | x::reste -> (x=literal) || (contains_literal reste literal)
+
+    let rec contains (litList : lit list) (literal : lit) : Boolean = match litList with
+    | [] -> false
+    | lit::reste -> if (literal=lit) then true else contains reste literal
     
     (*let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
     | [] -> dstack
@@ -145,12 +149,33 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> []
     | (lit, preds, dl)::reste -> lit::(remove reste)
 
-    let findParentConflict (conflictLit : lit list) (dstack : history) : (lit list),int = ...
+    let rec findPreds (literal : lit) (dstack : history) : (lit list) = match dstack with
+    | [] -> []
+    | (lit, preds, dl)::reste -> if (literal=lit) then 
+      let rec findPredsPreds (predecessors : lit list) = match predecessors with
+        | [] -> literal::[]
+        | pred::autres -> let predLit = findPreds pred dstack in 
+          let predsLit = findPredsPreds autres in predLit @ predsLit in
+          findPredsPreds preds
+      else findPreds literal reste
+
+    let rec findParentConflict (conflictLit : lit list) (dstack : history) : (lit list) = match conflictLit with
+    | [] -> []
+    | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
+
+    let max (x:int) (y:int) : int = if (x>y) then x else y
+
+    let rec findMaxDl (preds : lit list) (dstack : history) : int = match dstack with
+    | [] -> 0
+    | (lit, predecessors, dl)::reste -> let maxOldDl = findMaxDl preds reste in
+      if (contains preds lit) then max dl maxOldDl
+      else maxOldDl
 
     let analyzeConflict (instance : instance) : Clause,int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
-      | lit::reste -> let conflict,maxDl = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
+      | lit::reste -> let conflict = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
+        let maxDl = findMaxDl conflict instance.decisions in
         let rec createClauseToLearn conflit = match conflit with
           | [] -> Clause.empty
           | lit::reste -> Clause.add (Ast.neg lit) (createClauseToLearn reste) in
@@ -173,6 +198,13 @@ module CDCL (C:CHOICE) : SOLVER =
     | (dl', formula)::reste -> if (dl' = dl) then {nb_var_l = count_vars (Ast.Cnf.to_list formula); nb_clause_l = Ast.Cnf.cardinal formula; cnf_l = formula }
     else find_old_formula dl reste
 
+    let add (formula : Ast.t) (clause : Ast.Clause.t) : Ast.t = 
+      {
+        nb_var = max (count_vars formula) (count_vars clause);
+        nb_clause = (Ast.Cnf.cardinal formula) + 1 ;
+        cnf = Ast.Cnf.add clause formula
+      }
+
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
@@ -194,15 +226,15 @@ module CDCL (C:CHOICE) : SOLVER =
 
           (*Clause Learning*)
           f.nb_clause+=1
-          f.cnf = Cnf.of_list [f.cnf,Cnf.singleton(clauseToLearn)]
-          instance.ast = //TODO......
+          f.cnf = Ast.Cnf.add clauseToLearn f.cnf
+          instance.ast = add instance.ast clauseToLearn
           instance = simplify instance
           done
         
         (*Boolean Decision*)
         if (f_unassigned_under_m instance) then {
           instance.dl+=1
-          instance = make_decision(instance)
+          instance = make_decision(instance) (*S'assurer que met bien à jour instance.oldFormulas*)
           instance = simplify instance
         }
         noAssignment = f_unassigned_under_m instance || f_false_under_m instance
