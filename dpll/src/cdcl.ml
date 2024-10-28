@@ -55,29 +55,29 @@ module CDCL (C:CHOICE) : SOLVER =
       let unit_clauses = Ast.Lab_Cnf.filter (fun clause -> (Ast.Clause.cardinal clause.c) == 1) instance.ast.cnf_l
       in Ast.Lab_Cnf.fold (fun clause l -> (Ast.Clause.min_elt clause.c,clause.label)::l) unit_clauses []
     
-      let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : Ast.lab_t) : (Ast.lit * (Ast.lit list) list) =
-        (* remplace le label de la clause par la liste des prédecesseurs dans le graphe d'implication *)
-        match unit_clauses with
-        | [] -> []
-        | (literal,label)::t ->
-          let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) original.cnf_l)
-          in Ast.Clause.elements (Ast.Clause.remove literal clause.c)
-
-      let get_pure_literals (instance : instance) : Ast.model =
-        let rec filter_pure_literal list =
-          match list with
-          | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
-          | _ -> list
-          in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
-          in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
-      
-      let rec construct_predecessors_pure (pure_literals : Ast.model) (instance : instance) (original : Ast.lab_t) : history =
-        let clauses_where_neg_literal literal original =
-          Ast.Lab_Cnf.filter (fun l_clause -> Ast.Clause.mem (Ast.neg literal l_clause.c)) original
-          in 
-          match pure_literals with
-          | [] -> []
-          | literal::t -> (**)
+    let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : instance) : (Ast.lit * (Ast.lit list) list) =
+      (* remplace le label de la clause par la liste des prédecesseurs dans le graphe d'implication *)
+      match unit_clauses with
+      | [] -> []
+      | (literal,label)::t ->
+        let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) instance.ast.cnf_l)
+        in List.map Ast.neg Ast.Clause.elements (Ast.Clause.remove literal clause.c)
+    
+        let get_pure_literals (instance : instance) : Ast.model =
+          let rec filter_pure_literal list =
+            match list with
+            | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
+            | _ -> list
+            in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
+            in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
+        
+        let rec construct_predecessors_pure (pure_literals : Ast.model) (instance : instance) (original : Ast.lab_t) : history =
+          let clauses_where_neg_literal literal original =
+            Ast.Lab_Cnf.filter (fun l_clause -> Ast.Clause.mem (Ast.neg literal l_clause.c)) original
+            in 
+            match pure_literals with
+            | [] -> []
+            | literal::t -> (**)
     (* A AJOUTER PLUS TARD
 
     let pure_literal (instance : instance) : Ast.model =
