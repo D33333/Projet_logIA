@@ -99,6 +99,7 @@ module CDCL (C:CHOICE) : SOLVER =
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
         dl = dl'
+        oldFormulas = (instance.ast,instance.dl)::instance.oldFormulas
       }
 
     let make_decision (instance : instance) : instance =
@@ -190,7 +191,7 @@ module CDCL (C:CHOICE) : SOLVER =
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
-      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0 } in
+      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0; oldFormulas = [] } in
 
       let noAssignment = true in
       while (noAssignment) do
