@@ -98,8 +98,8 @@ module CDCL (C:CHOICE) : SOLVER =
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
-        dl = dl'
-        oldFormulas = (instance.ast,instance.dl)::instance.oldFormulas
+        dl = dl';
+        oldFormulas = (instance.dl,instance.ast)::instance.oldFormulas
       }
 
     let make_decision (instance : instance) : instance =
