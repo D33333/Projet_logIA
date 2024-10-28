@@ -4,13 +4,14 @@ open Dpll
 
 module CDCL (C:CHOICE) : SOLVER =
   struct
-    module S = DPLL(C)
+    (*module S = DPLL(C)*)
+    module LitSet = Set.Make(struct type t = int let compare = compare end)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
     type history = (Ast.lit * (Ast.lit list) * int) list
     type instance = {
       ast : Ast.lab_t;
       assignment : Ast.model;
-      unbound : S.LitSet.t;
+      unbound : LitSet.t;
       decisions : history;
       dl : int;
       oldFormulas : (int * Ast.Cnf.t) list
@@ -42,15 +43,15 @@ module CDCL (C:CHOICE) : SOLVER =
 
     let max (x:int) (y:int) : int = if (x>y) then x else y
 
-    let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists Ast.Clause.is_empty instance.ast.cnf
-    let f_true_under_m (instance : instance) : bool = Ast.Lab_Cnf.for_all valid instance.ast.cnf
+    let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists (fun clauseL -> clauseL.c=Ast.Clause.empty) instance.ast.cnf_l
+    let f_true_under_m (instance : instance) : bool = Ast.Lab_Cnf.for_all valid instance.ast.cnf_l
     let f_unassigned_under_m (instance : instance) : bool = not(f_false_under_m instance) && not(f_true_under_m instance)
 
-    let rec contains_literal (dstack : history) (literal : lit) : bool = match dstack with
-    | [] -> return false
+    let rec contains_literal (dstack : history) (literal : Ast.lit) : bool = match dstack with
+    | [] -> false
     | x::reste -> (x=literal) || (contains_literal reste literal)
 
-    let rec contains (litList : lit list) (literal : lit) : bool = match litList with
+    let rec contains (litList : Ast.lit list) (literal : Ast.lit) : bool = match litList with
     | [] -> false
     | lit::reste -> if (literal=lit) then true else contains reste literal
 
@@ -58,7 +59,7 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> []
     | (lit, preds, dl)::reste -> lit::(update_model reste)
 
-    let rec findMaxDl (preds : lit list) (dstack : history) : int = match dstack with
+    let rec findMaxDl (preds : Ast.lit list) (dstack : history) : int = match dstack with
     | [] -> 0
     | (lit, predecessors, dl)::reste -> let maxOldDl = findMaxDl preds reste in
       if (contains preds lit) then max dl maxOldDl
@@ -151,13 +152,13 @@ module CDCL (C:CHOICE) : SOLVER =
       | _ -> let assign_pure = fun i l -> assign_literal i l [] 
         in simplify (List.fold_left assign_pure instance literals)
     
-    let rec go_back_to (dl : int) (dstack : history) (unbound : S.LitSet.t) : history*S.LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history*LitSet.t = match dstack with
       | [] -> [],unbound
       | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste in
-      if (dl' > dl) then dstack',(S.LitSet.add lit unbound')
+      if (dl' > dl) then dstack',(LitSet.add lit unbound')
       else (lit,preds,dl')::dstack',unbound'
 
-    let rec find_preds_of_bottom (dstack : history) : (lit list) = match dstack with
+    let rec find_preds_of_bottom (dstack : history) : (Ast.lit list) = match dstack with
     | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
     | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
     | _ -> failwith "There is no empty clause in the stack."
@@ -168,7 +169,7 @@ module CDCL (C:CHOICE) : SOLVER =
     | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
     else (literal, ???, dl)::(add dstack dl reste)*)
 
-    let rec findPreds (literal : lit) (dstack : history) : (lit list) = match dstack with
+    let rec findPreds (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
     | [] -> []
     | (lit, preds, dl)::reste -> if (literal=lit) then 
       let rec findPredsPreds (predecessors : lit list) = match predecessors with
@@ -178,7 +179,7 @@ module CDCL (C:CHOICE) : SOLVER =
           findPredsPreds preds
       else findPreds literal reste
 
-    let rec findParentConflict (conflictLit : lit list) (dstack : history) : (lit list) = match conflictLit with
+    let rec findParentConflict (conflictLit : Ast.lit list) (dstack : history) : (Ast.lit list) = match conflictLit with
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
