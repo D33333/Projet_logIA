@@ -4,7 +4,6 @@ module CDCL (C:CHOICE) : SOLVER =
   struct
     module S = DPLL(C)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
-
     type history = (Ast.lit * (Ast.lit list) * int) list
     type instance = {
       ast : Ast.lab_t;
@@ -34,13 +33,12 @@ module CDCL (C:CHOICE) : SOLVER =
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
       let cnf =
-
         let assign_clause (clause: lab_clause) (cnf: Ast.Lab_Cnf.t) = (* a modifier *)
           if Ast.Clause.mem literal clause.c then cnf
           else Ast.Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
         in Ast.Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
-      { ast = { instance.ast with cnf };
-
+      { 
+        ast = { instance.ast with cnf };
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
@@ -53,17 +51,32 @@ module CDCL (C:CHOICE) : SOLVER =
 
     let unit_propagate (instance : instance) : (Ast.lit * int) list =
       (* Récupère les littéraux pouvant faire une unit propagation et le label de leur clause *)
-      let unit_clauses = Ast.Lab_Cnf.filter (fun clause -> (Ast.Clause.cardinal clause.c) == 1 instance.ast.cnf_l
+      let unit_clauses = Ast.Lab_Cnf.filter (fun clause -> (Ast.Clause.cardinal clause.c) == 1) instance.ast.cnf_l
       in Ast.Lab_Cnf.fold (fun clause l -> (Ast.Clause.min_elt clause.c,clause.label)::l) unit_clauses []
     
-    let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : instance) : (Ast.lit * (Ast.lit list) list) =
-      (* remplace le label de la clause par la liste des prédecesseurs dans le graphe d'implication *)
-      match unit_clauses with
-      | [] -> []
-      | (literal,label)::t ->
-        let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) instance.ast.cnf_l)
-        in Ast.Clause.elements (Ast.Clause.remove literal clause.c)
-    
+      let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : Ast.lab_t) : (Ast.lit * (Ast.lit list) list) =
+        (* remplace le label de la clause par la liste des prédecesseurs dans le graphe d'implication *)
+        match unit_clauses with
+        | [] -> []
+        | (literal,label)::t ->
+          let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) original.cnf_l)
+          in Ast.Clause.elements (Ast.Clause.remove literal clause.c)
+
+      let get_pure_literals (instance : instance) : Ast.model =
+        let rec filter_pure_literal list =
+          match list with
+          | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
+          | _ -> list
+          in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
+          in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
+      
+      let rec construct_predecessors_pure (pure_literals : Ast.model) (instance : instance) (original : Ast.lab_t) : history =
+        let clauses_where_neg_literal literal original =
+          Ast.Lab_Cnf.filter (fun l_clause -> Ast.Clause.mem (Ast.neg literal l_clause.c)) original
+          in 
+          match pure_literals with
+          | [] -> []
+          | literal::t -> (**)
     (* A AJOUTER PLUS TARD
 
     let pure_literal (instance : instance) : Ast.model =
@@ -82,14 +95,14 @@ module CDCL (C:CHOICE) : SOLVER =
         in 
         *)
 
-      let rec simplify (instance : instance) (original : instance) : instance =
+      let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
         (* Check if there is a unit clause in formula or pure: Unit Propagation *)
         let rec simplify_aux instance original updates =
           match updates with
           | [] -> instance
-          | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t)
-        in  simplify (simplify_aux instance original (construct_predecessors (unit_propagate instance)))
-
+          | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
+        in  simplify (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
+    
         (* PURE LITERAL PAS IMPLEMENTE : je decommenterai quand ca le sera
         match construct_predecessors (unit_propagate instance) with
         | [] -> instance
