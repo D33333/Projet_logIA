@@ -132,7 +132,7 @@ module CDCL (C:CHOICE) : SOLVER =
         match updates with
         | [] -> instance
         | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
-      in  simplify (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
+      in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
     
 
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
