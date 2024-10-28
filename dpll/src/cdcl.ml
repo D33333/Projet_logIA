@@ -13,7 +13,9 @@ module CDCL (C:CHOICE) : SOLVER =
       dl : int;
       oldFormulas : (int * Ast.Cnf) list
     }
-
+    (*-----------------------------------------------------------------------------------------------------------------*)
+    (* FONCTIONS POUR LE LABELING *)
+    (*-----------------------------------------------------------------------------------------------------------------*)
     let label (f : Ast.t) : Ast.lab_t =
       let rec label_aux (elts : Ast.Clause.t list) (acc : int) : Ast.Lab_Cnf.t =
         match elts with
@@ -25,12 +27,65 @@ module CDCL (C:CHOICE) : SOLVER =
           nb_clause_l = f.nb_clause;
           cnf_l = label_aux (Ast.Cnf.elements f.cnf) 0
         }
-
+    (*-----------------------------------------------------------------------------------------------------------------*)
+    (* FONCTIONS UNITAIRES *)
+    (*-----------------------------------------------------------------------------------------------------------------*)
     let new_dl (instance : instance) (predecessors : Ast.lit list) : int = 
       match predecessors with 
         | [] -> instance.dl + 1
         | _ -> instance.dl
 
+    let max (x:int) (y:int) : int = if (x>y) then x else y
+
+    let f_false_under_m (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.is_empty instance.ast.cnf
+    (*let F_unassigned (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.unassigned instance.ast.cnf*)
+    let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
+    let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
+
+    let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
+    | [] -> return false
+    | x::reste -> (x=literal) || (contains_literal reste literal)
+
+    let rec contains (litList : lit list) (literal : lit) : Boolean = match litList with
+    | [] -> false
+    | lit::reste -> if (literal=lit) then true else contains reste literal
+
+    let rec remove (dstack : history) : Ast.model = match dstack with
+    | [] -> []
+    | (lit, preds, dl)::reste -> lit::(remove reste)
+
+    let rec findMaxDl (preds : lit list) (dstack : history) : int = match dstack with
+    | [] -> 0
+    | (lit, predecessors, dl)::reste -> let maxOldDl = findMaxDl preds reste in
+      if (contains preds lit) then max dl maxOldDl
+      else maxOldDl
+
+    let rec max_vars (clause : int list) : int = match clause with
+    | [] -> 0
+    | lit::autres -> let max = max_vars autres in if ((abs lit) > max) then (abs lit)
+    else max
+    
+    let rec count_vars (formula : Ast.Clause list) : int = match formula with
+    | [] -> 0
+    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause) in
+    let max2 = count_vars reste in if (max1 > max2) then max1
+    else max2
+    
+    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Cnf) list) : Ast.lab_t = match oldFormulas with
+    | [] -> failwith "Invalid level of decision"
+    | (dl', formula)::reste -> if (dl' = dl) then {nb_var_l = count_vars (Ast.Cnf.to_list formula); nb_clause_l = Ast.Cnf.cardinal formula; cnf_l = formula }
+    else find_old_formula dl reste
+
+    let add (formula : Ast.t) (clause : Ast.Clause.t) : Ast.t = 
+      {
+        nb_var = max (count_vars formula) (count_vars clause);
+        nb_clause = (Ast.Cnf.cardinal formula) + 1 ;
+        cnf = Ast.Cnf.add clause formula
+      }
+    
+    (*-----------------------------------------------------------------------------------------------------------------*)
+    (* FONCTIONS D'ACTION DE L'ALGORITHME *)
+    (*-----------------------------------------------------------------------------------------------------------------*)
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
       let cnf =
@@ -113,12 +168,6 @@ module CDCL (C:CHOICE) : SOLVER =
             | _ -> simplify (List.fold_left assign_literal instance (pure_literal instance))
           end
         | literals -> simplify (List.fold_left assign_literal instance literals) *)
-
-
-    let f_false_under_m (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.is_empty instance.ast.cnf
-    (*let F_unassigned (instance : instance) : Boolean = Ast.Cnf.exists Ast.Clause.unassigned instance.ast.cnf*)
-    let f_true_under_m (instance : instance) : Boolean = Ast.Cnf.for_all Ast.Clause.valid instance.ast.cnf
-    let f_unassigned_under_m (instance : instance) : Boolean = !f_false_under_m(instance) && !(f_true_under_m(instance))
     
     let rec go_back_to (dl : int) (dstack : history ) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
       | [] -> [],unbound
@@ -130,24 +179,12 @@ module CDCL (C:CHOICE) : SOLVER =
     | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
     | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
     | _ -> failwith "There is no empty clause in the stack."
-
-    let rec contains_literal (dstack : history) (literal : lit) : Boolean = match dstack with
-    | [] -> return false
-    | x::reste -> (x=literal) || (contains_literal reste literal)
-
-    let rec contains (litList : lit list) (literal : lit) : Boolean = match litList with
-    | [] -> false
-    | lit::reste -> if (literal=lit) then true else contains reste literal
     
     (*let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
     | [] -> dstack
     | -1::reste -> (-1, ???, -1)::(add dstack dl reste)
     | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
     else (literal, ???, dl)::(add dstack dl reste)*)
-
-    let rec remove (dstack : history) : Ast.model = match dstack with
-    | [] -> []
-    | (lit, preds, dl)::reste -> lit::(remove reste)
 
     let rec findPreds (literal : lit) (dstack : history) : (lit list) = match dstack with
     | [] -> []
@@ -163,14 +200,6 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
-    let max (x:int) (y:int) : int = if (x>y) then x else y
-
-    let rec findMaxDl (preds : lit list) (dstack : history) : int = match dstack with
-    | [] -> 0
-    | (lit, predecessors, dl)::reste -> let maxOldDl = findMaxDl preds reste in
-      if (contains preds lit) then max dl maxOldDl
-      else maxOldDl
-
     let analyzeConflict (instance : instance) : Clause,int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
@@ -182,29 +211,9 @@ module CDCL (C:CHOICE) : SOLVER =
           (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
-    let rec max_vars (clause : int list) : int = match clause with
-      | [] -> 0
-      | lit::autres -> let max = max_vars autres in if ((abs lit) > max) then (abs lit)
-      else max
-    
-    let rec count_vars (formula : Ast.Clause list) : int = match formula with
-    | [] -> 0
-    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause) in
-    let max2 = count_vars reste in if (max1 > max2) then max1
-    else max2
-    
-    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Cnf) list) : Ast.lab_t = match oldFormulas with
-    | [] -> failwith "Invalid level of decision"
-    | (dl', formula)::reste -> if (dl' = dl) then {nb_var_l = count_vars (Ast.Cnf.to_list formula); nb_clause_l = Ast.Cnf.cardinal formula; cnf_l = formula }
-    else find_old_formula dl reste
-
-    let add (formula : Ast.t) (clause : Ast.Clause.t) : Ast.t = 
-      {
-        nb_var = max (count_vars formula) (count_vars clause);
-        nb_clause = (Ast.Cnf.cardinal formula) + 1 ;
-        cnf = Ast.Cnf.add clause formula
-      }
-
+    (*-----------------------------------------------------------------------------------------------------------------*)
+    (* FONCTION SOLVE DE CDCL *)
+    (*-----------------------------------------------------------------------------------------------------------------*)
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
