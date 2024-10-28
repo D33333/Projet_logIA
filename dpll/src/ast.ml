@@ -18,7 +18,7 @@ end)
 module Cnf = Set.Make(
   struct type t = Clause.t
 
-  let compare = Clause.compare 
+  let compare = Clause.compare
 end)
 
 type t = {

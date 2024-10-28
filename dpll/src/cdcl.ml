@@ -10,7 +10,8 @@ module CDCL (C:CHOICE) : SOLVER =
       assignment : Ast.model;
       unbound : S.LitSet.t;
       decisions : history;
-      dl : int
+      dl : int;
+      oldFormulas : (int * Ast.Cnf) list
     }
 
     let label (f : Ast.t) : Ast.lab_t =
@@ -156,6 +157,22 @@ module CDCL (C:CHOICE) : SOLVER =
           (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
+    let rec max_vars (clause : int list) : int = match clause with
+      | [] -> 0
+      | lit::autres -> let max = max_vars autres in if ((abs lit) > max) then (abs lit)
+      else max
+    
+    let rec count_vars (formula : Ast.Clause list) : int = match formula with
+    | [] -> 0
+    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause) in
+    let max2 = count_vars reste in if (max1 > max2) then max1
+    else max2
+    
+    let rec find_old_formula (dl : int) (oldFormulas : (int * Ast.Cnf) list) : Ast.lab_t = match oldFormulas with
+    | [] -> failwith "Invalid level of decision"
+    | (dl', formula)::reste -> if (dl' = dl) then {nb_var_l = count_vars (Ast.Cnf.to_list formula); nb_clause_l = Ast.Cnf.cardinal formula; cnf_l = formula }
+    else find_old_formula dl reste
+
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
@@ -173,11 +190,12 @@ module CDCL (C:CHOICE) : SOLVER =
           instance.dl = dl
           instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound
           instance.assignment = remove instance.decisions
-          instance.ast = (*Recup ce qu'il y a dans instance.decisions à ce niveau là*)
+          instance.ast = find_old_formula dl instance.oldFormulas
 
           (*Clause Learning*)
           f.nb_clause+=1
           f.cnf = Cnf.of_list [f.cnf,Cnf.singleton(clauseToLearn)]
+          instance.ast = 
           instance = simplify instance
           done
         
