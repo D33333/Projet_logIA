@@ -98,7 +98,8 @@ module CDCL (C:CHOICE) : SOLVER =
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
-        dl = dl'
+        dl = dl';
+        oldFormulas = (instance.dl,instance.ast)::instance.oldFormulas
       }
 
     let make_decision (instance : instance) : instance =
@@ -118,56 +119,29 @@ module CDCL (C:CHOICE) : SOLVER =
         let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) instance.ast.cnf_l)
         in List.map Ast.neg Ast.Clause.elements (Ast.Clause.remove literal clause.c)
     
-        let get_pure_literals (instance : instance) : Ast.model =
-          let rec filter_pure_literal list =
-            match list with
-            | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
-            | _ -> list
-            in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
-            in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
-        
-        let rec construct_predecessors_pure (pure_literals : Ast.model) (instance : instance) (original : Ast.lab_t) : history =
-          let clauses_where_neg_literal literal original =
-            Ast.Lab_Cnf.filter (fun l_clause -> Ast.Clause.mem (Ast.neg literal l_clause.c)) original
-            in 
-            match pure_literals with
-            | [] -> []
-            | literal::t -> (**)
-    (* A AJOUTER PLUS TARD
-
-    let pure_literal (instance : instance) : Ast.model =
+    let pure_literals (instance : instance) : Ast.model =
       let rec filter_pure_literal list =
         match list with
         | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
         | _ -> list
-        in let lab_clause_union (lab_clause1 : lab_clause) (clause2 : Ast.Clause.t) : Ast.Clause.t = Ast.Clause.union lab_clause1.c clause2
+        in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
-    let rec construct_predecessors_pure (m : Ast.model) (original : instance) : (lit * (lit list)) list =
-      match m with
-      | [] -> []
-      | literal::t ->
-        let clauses_with_neg = Ast.Lab_Cnf.filter (fun clause -> Ast.Clause.mem (Ast.neg lit) clause.c) original.ast.cnf_l
-        in 
-        *)
-
-      let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
-        (* Check if there is a unit clause in formula or pure: Unit Propagation *)
-        let rec simplify_aux instance original updates =
-          match updates with
-          | [] -> instance
-          | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
-        in  simplify (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
-    
-        (* PURE LITERAL PAS IMPLEMENTE : je decommenterai quand ca le sera
-        match construct_predecessors (unit_propagate instance) with
+    let rec simplify_unit (instance : instance) (original : Ast.lab_t) : instance =
+      (* Check if there is a unit clause in formula or pure: Unit Propagation *)
+      let rec simplify_aux instance original updates =
+        match updates with
         | [] -> instance
-          begin
-            match pure_literal instance with
-            | [] -> instance
-            | _ -> simplify (List.fold_left assign_literal instance (pure_literal instance))
-          end
-        | literals -> simplify (List.fold_left assign_literal instance literals) *)
+        | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
+      in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
+    
+
+    let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
+      let literals = pure_literals instance in
+      match literals with
+      | [] -> simplify_unit insance original
+      | _ -> let assign_pure = fun i l -> assign_literal i l [] 
+        in simplify (List.fold_left assign_pure instance literals)
     
     let rec go_back_to (dl : int) (dstack : history ) (unbound : S.LitSet.t) : history,S.LitSet.t = match dstack with
       | [] -> [],unbound
@@ -217,7 +191,7 @@ module CDCL (C:CHOICE) : SOLVER =
     let solve (f : Ast.t) : answer = 
       let range = List.init f.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
-      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0 } in
+      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0; oldFormulas = [] } in
 
       let noAssignment = true in
       while (noAssignment) do
