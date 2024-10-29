@@ -28,8 +28,6 @@ module CDCL (C:CHOICE) : SOLVER =
           nb_clause_l = f.nb_clause;
           cnf_l = label_aux (Ast.Cnf.elements f.cnf) 0
         }
-
-    let label_clause (clause : Ast.Clause.t) (lab : int) : (Ast.lab_clause) = {c = clause ; label = lab}
     
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS UNITAIRES *)
