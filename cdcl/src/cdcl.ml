@@ -151,7 +151,7 @@ module CDCL (C:CHOICE) : SOLVER =
       | _ -> let assign_pure = fun i l -> assign_literal i l [] 
         in simplify (List.fold_left assign_pure instance literals) original
     
-    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history*LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
       | [] -> [],unbound
       | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste unbound in
       if (dl' > dl) then dstack',(LitSet.add lit unbound')
