@@ -12,7 +12,7 @@ module CDCL (C:CHOICE) : SOLVER =
       unbound : LitSet.t;
       decisions : history;
       dl : int;
-      oldFormulas : (int * Ast.Cnf.t) list
+      oldFormulas : (int * Ast.Cnf.t) list (* (int * Ast.lab_t) list ? *)
     }
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS POUR LE LABELING *)
@@ -47,7 +47,7 @@ module CDCL (C:CHOICE) : SOLVER =
 
     let rec contains_literal (dstack : history) (literal : Ast.lit) : bool = match dstack with
     | [] -> false
-    | x::reste -> (x=literal) || (contains_literal reste literal)
+    | (x,_,_)::reste -> (x=literal) || (contains_literal reste literal)
 
     let rec contains (litList : Ast.lit list) (literal : Ast.lit) : bool = match litList with
     | [] -> false
@@ -97,12 +97,12 @@ module CDCL (C:CHOICE) : SOLVER =
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
       let cnf =
-        let assign_clause (clause: lab_clause) (cnf: Ast.Lab_Cnf.t) = (* a modifier *)
+        let assign_clause (clause: Ast.lab_clause) (cnf: Ast.Lab_Cnf.t) =
           if Ast.Clause.mem literal clause.c then cnf
-          else Ast.Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
-        in Ast.Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
+          else Ast.Lab_Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
+        in Ast.Lab_Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
       { 
-        ast = { instance.ast with cnf };
+        ast = { instance.ast with cnf_l = cnf };
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
