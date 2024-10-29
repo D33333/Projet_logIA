@@ -1,7 +1,5 @@
 open Dpll
 
-(* label ! *)
-
 module CDCL (C:CHOICE) : SOLVER =
   struct
     (*module S = DPLL(C)*)
@@ -30,6 +28,8 @@ module CDCL (C:CHOICE) : SOLVER =
           nb_clause_l = f.nb_clause;
           cnf_l = label_aux (Ast.Cnf.elements f.cnf) 0
         }
+
+    let label_clause (clause : Ast.Clause.t) (lab : int) : (Ast.lab_clause) = {c = clause ; label = lab}
     
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS UNITAIRES *)
@@ -189,7 +189,7 @@ module CDCL (C:CHOICE) : SOLVER =
       | lit::reste -> let conflict = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
         let maxDl = findMaxDl conflict instance.decisions in
         let rec createClauseToLearn conflit = match conflit with
-          | [] -> {c = Ast.Clause.empty; label = ""},maxDl (*TROUVER NOUVEAU LABEL + CHAMPS STRUCTURE*)
+          | [] -> {c = Ast.Clause.empty; label = instance.ast.nb_clause_l},maxDl
           | lit::reste -> Ast.Clause.add (Ast.neg lit) (createClauseToLearn reste) in (*A RELIRE*)
           (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
