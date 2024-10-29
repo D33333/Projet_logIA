@@ -13,7 +13,7 @@ FILE_FAIL=$(mktemp)
 TOTAL=0
 
 TIMEOUT=${1:-30}
-CMD="timeout ${TIMEOUT} ./dpll --proof"
+CMD="timeout ${TIMEOUT} ./cdcl --proof"
 CMD_PROOF="picosat"
 
 JOBS=${2:-4}

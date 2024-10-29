@@ -9,7 +9,6 @@ end
 
 module CDCL (C:CHOICE) : SOLVER_CDCL =
   struct
-    print_string "Début de CDCL";
     (*module S = DPLL(C)*)
     module LitSet = Set.Make(struct type t = int let compare = compare end)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
@@ -205,17 +204,21 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
     let solve2 (formulaInit : Ast.t) : Ast.model option = 
-      print_string "Début de Solve";
+      print_endline "Début de Solve";
       let fInit = label formulaInit in
+      print_endline "Début de Solve2";
       (*let f = label formulaInit in*)
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
       let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
+      print_endline "Je passe simplify";
 
       let noAssignment = ref true in
       let isUnsat = ref false in
+      print_endline "Je rentre dans le grand while";
       while (!noAssignment && not (!isUnsat)) do
 
+        print_endline "Je rentre dans le petit While";
         (*Backtracking*)
         while (f_false_under_m !instance && not (!isUnsat)) do
           isUnsat := (!instance.dl=0);
@@ -237,6 +240,8 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
           instance := simplify !instance fInit;
           done;
         
+        print_endline "ENTRE 2";
+
         (*Boolean Decision*)
         if (f_unassigned_under_m !instance && not (!isUnsat)) then
           begin
@@ -247,6 +252,7 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
         
         noAssignment := f_unassigned_under_m !instance || f_false_under_m !instance
         done;
+      print_endline "Début de Solve3";
       if (!isUnsat) then None else
       Some !instance.assignment
     end
