@@ -1,7 +1,15 @@
 open Dpll
 
-module CDCL (C:CHOICE) : SOLVER =
+module type SOLVER_CDCL = sig
+
+  (** solve takes a cnf formula and returns either None if it is unsatisfiable or
+      a model that satisfies the formula. *)
+  val solve2 : Ast.t -> Ast.model option
+end
+
+module CDCL (C:CHOICE) : SOLVER_CDCL =
   struct
+    print_string "Début de CDCL";
     (*module S = DPLL(C)*)
     module LitSet = Set.Make(struct type t = int let compare = compare end)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
@@ -196,7 +204,8 @@ module CDCL (C:CHOICE) : SOLVER =
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let solve (formulaInit : Ast.t) : Ast.model option = 
+    let solve2 (formulaInit : Ast.t) : Ast.model option = 
+      print_string "Début de Solve";
       let fInit = label formulaInit in
       (*let f = label formulaInit in*)
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
