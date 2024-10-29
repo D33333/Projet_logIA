@@ -7,12 +7,12 @@ module CDCL (C:CHOICE) : SOLVER =
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
     type history = (Ast.lit * (Ast.lit list) * int) list
     type instance = {
-      ast : Ast.lab_t;
-      assignment : Ast.model;
-      unbound : LitSet.t;
-      decisions : history;
-      dl : int;
-      oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
+      mutable ast : Ast.lab_t;
+      mutable assignment : Ast.model;
+      mutable unbound : LitSet.t;
+      mutable decisions : history;
+      mutable dl : int;
+      mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
     }
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS POUR LE LABELING *)
@@ -70,7 +70,7 @@ module CDCL (C:CHOICE) : SOLVER =
     
     let rec count_vars (formula : Ast.lab_clause list) : int = match formula with
     | [] -> 0
-    | clause::reste -> let max1 = max_vars (Ast.Clause.to_list clause.c) in
+    | clause::reste -> let max1 = max_vars (Ast.Clause.elements clause.c) in
     let max2 = count_vars reste in if (max1 > max2) then max1
     else max2
     
@@ -78,7 +78,7 @@ module CDCL (C:CHOICE) : SOLVER =
     | [] -> failwith "Invalid level of decision"
     | (dl', formula)::reste -> if (dl' = dl) then 
       {
-        nb_var_l = count_vars (Ast.Lab_Cnf.to_list formula);
+        nb_var_l = count_vars (Ast.Lab_Cnf.elements formula);
         nb_clause_l = Ast.Lab_Cnf.cardinal formula;
         cnf_l = formula
       }
@@ -133,7 +133,7 @@ module CDCL (C:CHOICE) : SOLVER =
         match list with
         | x :: y :: xs -> if x == -y then filter_pure_literal xs else x :: filter_pure_literal (y :: xs)
         | _ -> list
-        in let lab_clause_union l_clause = Ast.Clause.union l_clause.c
+        in let lab_clause_union (l_clause : Ast.lab_clause) = Ast.Clause.union l_clause.c
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
     let rec simplify_unit (instance : instance) (original : Ast.lab_t) : instance =
@@ -142,18 +142,18 @@ module CDCL (C:CHOICE) : SOLVER =
         match updates with
         | [] -> instance
         | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
-      in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original))
+      in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original)) original
     
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
       let literals = pure_literals instance in
       match literals with
-      | [] -> simplify_unit insance original
+      | [] -> simplify_unit instance original
       | _ -> let assign_pure = fun i l -> assign_literal i l [] 
-        in simplify (List.fold_left assign_pure instance literals)
+        in simplify (List.fold_left assign_pure instance literals) original
     
-    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history*LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
       | [] -> [],unbound
-      | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste in
+      | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste unbound in
       if (dl' > dl) then dstack',(LitSet.add lit unbound')
       else (lit,preds,dl')::dstack',unbound'
 
@@ -171,7 +171,7 @@ module CDCL (C:CHOICE) : SOLVER =
     let rec findPreds (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
     | [] -> []
     | (lit, preds, dl)::reste -> if (literal=lit) then 
-      let rec findPredsPreds (predecessors : lit list) = match predecessors with
+      let rec findPredsPreds (predecessors : Ast.lit list) = match predecessors with
         | [] -> literal::[]
         | pred::autres -> let predLit = findPreds pred dstack in 
           let predsLit = findPredsPreds autres in predLit @ predsLit in
@@ -185,52 +185,60 @@ module CDCL (C:CHOICE) : SOLVER =
     let analyzeConflict (instance : instance) : Ast.lab_clause*int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
-      | lit::reste -> let conflict = findParentConflict lit::reste instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
+      | lit::reste -> let conflict = findParentConflict (lit::reste) instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
         let maxDl = findMaxDl conflict instance.decisions in
-        let rec createClauseToLearn conflit = match conflit with
-          | [] -> {c = Ast.Clause.empty; label = instance.ast.nb_clause_l},maxDl
-          | lit::reste -> Ast.Clause.add (Ast.neg lit) (createClauseToLearn reste) in (*A RELIRE*)
-          (createClauseToLearn conflict),maxDl
+        let rec createClauseToLearn (conflit : Ast.lit list) : Ast.lab_clause = match conflit with
+          | [] -> {c = Ast.Clause.empty; label = instance.ast.nb_clause_l}
+          | lit::reste -> let clause = createClauseToLearn reste in
+            {c = Ast.Clause.add (Ast.neg lit) clause.c ; label = clause.label} in (*A RELIRE*)
+        (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let solve (formulaInit : Ast.t) : answer = 
-      let f = label formulaInit in
+    let solve (formulaInit : Ast.t) : Ast.model option = 
+      let fInit = label formulaInit in
+      (*let f = label formulaInit in*)
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
-      let instance = simplify { ast = f; assignment = []; unbound = unbound_vars; decision = []; dl = 0; oldFormulas = [] } in
+      let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
 
-      let noAssignment = true in
-      while (noAssignment) do
+      let noAssignment = ref true in
+      let isUnsat = ref false in
+      while (!noAssignment && not (!isUnsat)) do
 
         (*Backtracking*)
-        while (f_false_under_m instance) do
-          if (instance.dl=0) then Unsat else
-          let clauseToLearn,dl = analyzeConflict instance in
+        while (f_false_under_m !instance && not (!isUnsat)) do
+          isUnsat := (!instance.dl=0);
+          if (!isUnsat = true) then () else
+          let clauseToLearn,dl = analyzeConflict !instance in
 
           (*Backtrack*)
-          instance.dl = dl;
-          instance.decisions,instance.unbound = go_back_to dl instance.decisions instance.unbound;
-          instance.assignment = update_model instance.decisions;
-          instance.ast = find_old_formula dl instance.oldFormulas;
+          !instance.dl <- dl;
+          let decisions',unbound' = go_back_to dl !instance.decisions !instance.unbound in
+          !instance.decisions <- decisions';
+          !instance.unbound <- unbound';
+          !instance.assignment <- update_model !instance.decisions;
+          !instance.ast <- find_old_formula dl !instance.oldFormulas;
 
           (*Clause Learning*)
-          f.nb_clause_l+=1;
-          f.cnf_l = Ast.Lab_Cnf.add clauseToLearn f.cnf_l;
-          instance.ast = add instance.ast clauseToLearn;
-          instance = simplify instance;
+          (*f.nb_clause_l <- f.nb_clause_l + 1;
+          f.cnf_l <- Ast.Lab_Cnf.add clauseToLearn f.cnf_l;*)
+          !instance.ast <- add !instance.ast clauseToLearn;
+          instance := simplify !instance fInit;
           done;
         
         (*Boolean Decision*)
-        if (f_unassigned_under_m instance) then
+        if (f_unassigned_under_m !instance && not (!isUnsat)) then
           begin
-          instance.dl+=1;
-          instance = make_decision(instance); (*S'assurer que met bien à jour instance.oldFormulas*)
-          instance = simplify instance;
+          !instance.dl <- !instance.dl + 1;
+          instance := make_decision(!instance); (*S'assurer que met bien à jour instance.oldFormulas*)
+          instance := simplify !instance fInit;
           end;
         
-        noAssignment = f_unassigned_under_m instance || f_false_under_m instance
+        noAssignment := f_unassigned_under_m !instance || f_false_under_m !instance
         done;
+      if (!isUnsat) then None else
+      Some !instance.assignment
     end

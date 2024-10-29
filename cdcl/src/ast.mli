@@ -28,9 +28,9 @@ type t =
 
 type lab_t =
   {
-    nb_var_l: int;
-    nb_clause_l: int;
-    cnf_l: Lab_Cnf.t
+    mutable nb_var_l: int;
+    mutable nb_clause_l: int;
+    mutable cnf_l: Lab_Cnf.t
   }
 
 (** [neg v] returns the opposite litteral *)
