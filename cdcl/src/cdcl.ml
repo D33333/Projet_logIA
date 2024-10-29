@@ -12,7 +12,7 @@ module CDCL (C:CHOICE) : SOLVER =
       unbound : LitSet.t;
       decisions : history;
       dl : int;
-      oldFormulas : (int * Ast.Cnf.t) list (* (int * Ast.lab_t) list ? *)
+      oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
     }
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS POUR LE LABELING *)
@@ -107,7 +107,7 @@ module CDCL (C:CHOICE) : SOLVER =
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
         dl = dl';
-        oldFormulas = (instance.dl,instance.ast)::instance.oldFormulas
+        oldFormulas = (instance.dl,instance.ast.cnf_l)::instance.oldFormulas
       }
 
     let make_decision (instance : instance) : instance =
@@ -119,14 +119,15 @@ module CDCL (C:CHOICE) : SOLVER =
       let unit_clauses = Ast.Lab_Cnf.filter (fun clause -> (Ast.Clause.cardinal clause.c) == 1) instance.ast.cnf_l
       in Ast.Lab_Cnf.fold (fun clause l -> (Ast.Clause.min_elt clause.c,clause.label)::l) unit_clauses []
     
-    let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : instance) : (Ast.lit * (Ast.lit list) list) =
+    let rec construct_predecessors_unit (unit_clauses : (Ast.lit * int) list) (original : Ast.lab_t) : (Ast.lit * (Ast.lit list)) list =
       (* remplace le label de la clause par la liste des prédecesseurs dans le graphe d'implication *)
       match unit_clauses with
       | [] -> []
       | (literal,label)::t ->
-        let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) instance.ast.cnf_l)
-        in List.map Ast.neg Ast.Clause.elements (Ast.Clause.remove literal clause.c)
-    
+        let clause = Ast.Lab_Cnf.min_elt (Ast.Lab_Cnf.filter (fun clause -> clause.label == label) original.cnf_l)
+        in let pred = List.map Ast.neg (Ast.Clause.elements (Ast.Clause.remove literal clause.c))
+        in (literal,pred)::(construct_predecessors_unit t original)
+
     let pure_literals (instance : instance) : Ast.model =
       let rec filter_pure_literal list =
         match list with
