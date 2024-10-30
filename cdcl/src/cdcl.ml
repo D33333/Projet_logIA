@@ -146,15 +146,6 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
         in let lab_clause_union (l_clause : Ast.lab_clause) = Ast.Clause.union l_clause.c
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
-    (*let rec simplify_unit (instance : instance) (original : Ast.lab_t) : instance =
-      (* Check if there is a unit clause in formula or pure: Unit Propagation *)
-      let rec simplify_aux instance original updates =
-        match updates with
-        | [] -> instance
-        | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
-      in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original)) original
-    *)
-
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
       match unit_propagate instance original with
       | [] -> begin
@@ -176,12 +167,6 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
     | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
     | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
     | _ -> failwith "There is no empty clause in the stack."
-    
-    (*let rec add (dstack : history) (dl : int) (assignment : Ast.model) : history = match assignment with
-    | [] -> dstack
-    | -1::reste -> (-1, ???, -1)::(add dstack dl reste)
-    | literal::reste -> if (contains_literal dstack literal) then add dstack dl reste
-    else (literal, ???, dl)::(add dstack dl reste)*)
 
     let rec findPreds (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
     | [] -> []
