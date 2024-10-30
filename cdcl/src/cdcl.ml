@@ -1,6 +1,13 @@
 open Dpll
 
-module CDCL (C:CHOICE) : SOLVER =
+module type SOLVER_CDCL = sig
+
+  (** solve takes a cnf formula and returns either None if it is unsatisfiable or
+      a model that satisfies the formula. *)
+  val solve2 : Ast.t -> Ast.model option
+end
+
+module CDCL (C:CHOICE) : SOLVER_CDCL =
   struct
     (*module S = DPLL(C)*)
     module LitSet = Set.Make(struct type t = int let compare = compare end)
@@ -86,7 +93,7 @@ module CDCL (C:CHOICE) : SOLVER =
 
     let add (formula : Ast.lab_t) (clause : Ast.lab_clause) : Ast.lab_t = 
       {
-        nb_var_l = max (count_vars (Ast.Lab_Cnf.to_list formula.cnf_l)) (count_vars (clause::[]));
+        nb_var_l = max (count_vars (Ast.Lab_Cnf.elements formula.cnf_l)) (count_vars (clause::[]));
         nb_clause_l = (Ast.Lab_Cnf.cardinal formula.cnf_l) + 1 ;
         cnf_l = Ast.Lab_Cnf.add clause formula.cnf_l
       }
@@ -197,25 +204,29 @@ module CDCL (C:CHOICE) : SOLVER =
         let maxDl = findMaxDl conflict instance.decisions in
         let rec createClauseToLearn (conflit : Ast.lit list) : Ast.lab_clause = match conflit with
           | [] -> {c = Ast.Clause.empty; label = instance.ast.nb_clause_l}
-          | lit::reste -> let clause = createClauseToLearn reste in
-            {c = Ast.Clause.add (Ast.neg lit) clause.c ; label = clause.label} in (*A RELIRE*)
+          | lit::reste -> let clauseToLearn = createClauseToLearn reste in {c = Ast.Clause.add (Ast.neg lit) (clauseToLearn.c); label = clauseToLearn.label} in (*A RELIRE*)
         (createClauseToLearn conflict),maxDl
       | _ ->  failwith "Error in the implication graph"
 
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let solve (formulaInit : Ast.t) : Ast.model option = 
+    let solve2 (formulaInit : Ast.t) : Ast.model option = 
+      print_endline "Début de Solve";
       let fInit = label formulaInit in
+      print_endline "Début de Solve2";
       (*let f = label formulaInit in*)
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
       let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
+      print_endline "Je passe simplify";
 
       let noAssignment = ref true in
       let isUnsat = ref false in
+      print_endline "Je rentre dans le grand while";
       while (!noAssignment && not (!isUnsat)) do
 
+        print_endline "Je rentre dans le petit While";
         (*Backtracking*)
         while (f_false_under_m !instance && not (!isUnsat)) do
           isUnsat := (!instance.dl=0);
@@ -237,6 +248,8 @@ module CDCL (C:CHOICE) : SOLVER =
           instance := simplify !instance fInit;
           done;
         
+        print_endline "ENTRE 2";
+
         (*Boolean Decision*)
         if (f_unassigned_under_m !instance && not (!isUnsat)) then
           begin
@@ -247,6 +260,7 @@ module CDCL (C:CHOICE) : SOLVER =
         
         noAssignment := f_unassigned_under_m !instance || f_false_under_m !instance
         done;
+      print_endline "Début de Solve3";
       if (!isUnsat) then None else
       Some !instance.assignment
     end
