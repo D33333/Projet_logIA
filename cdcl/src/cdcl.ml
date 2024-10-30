@@ -114,7 +114,7 @@ module CDCL (C:CHOICE) : SOLVER =
       let literal = LitSet.choose instance.unbound in
       assign_literal instance literal []
 
-    let unit_propagate (instance : instance) : (Ast.lit * int) list =
+    let get_unit_clauses (instance : instance) : (Ast.lit * int) list =
       (* Récupère les littéraux pouvant faire une unit propagation et le label de leur clause *)
       let unit_clauses = Ast.Lab_Cnf.filter (fun clause -> (Ast.Clause.cardinal clause.c) == 1) instance.ast.cnf_l
       in Ast.Lab_Cnf.fold (fun clause l -> (Ast.Clause.min_elt clause.c,clause.label)::l) unit_clauses []
@@ -128,6 +128,9 @@ module CDCL (C:CHOICE) : SOLVER =
         in let pred = List.map Ast.neg (Ast.Clause.elements (Ast.Clause.remove literal clause.c))
         in (literal,pred)::(construct_predecessors_unit t original)
 
+    let unit_propagate (instance : instance) (original : Ast.lab_t) : (Ast.lit * (Ast.lit list)) list =
+      construct_predecessors_unit (get_unit_clauses instance) original
+
     let pure_literals (instance : instance) : Ast.model =
       let rec filter_pure_literal list =
         match list with
@@ -136,20 +139,25 @@ module CDCL (C:CHOICE) : SOLVER =
         in let lab_clause_union (l_clause : Ast.lab_clause) = Ast.Clause.union l_clause.c
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
-    let rec simplify_unit (instance : instance) (original : Ast.lab_t) : instance =
+    (*let rec simplify_unit (instance : instance) (original : Ast.lab_t) : instance =
       (* Check if there is a unit clause in formula or pure: Unit Propagation *)
       let rec simplify_aux instance original updates =
         match updates with
         | [] -> instance
         | (literal,predecessors)::t -> simplify_aux (assign_literal instance literal predecessors) original t
       in  simplify_unit (simplify_aux instance original (construct_predecessors_unit (unit_propagate instance) original)) original
-    
+    *)
+
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
-      let literals = pure_literals instance in
-      match literals with
-      | [] -> simplify_unit instance original
-      | _ -> let assign_pure = fun i l -> assign_literal i l [] 
-        in simplify (List.fold_left assign_pure instance literals) original
+      match unit_propagate instance original with
+      | [] -> begin
+        match pure_literals instance with
+        | [] -> instance
+        | literals -> let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [] in
+          simplify (List.fold_left assign_pure instance literals) original
+        end
+      | assignments -> let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
+        simplify (List.fold_left assign_unit instance assignments) original
     
     let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
       | [] -> [],unbound
