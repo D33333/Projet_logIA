@@ -16,7 +16,7 @@ module S = Cdcl.CDCL(Dpll.DefaultChoice)
 (** Handle files given on the command line *)
 let handle_file : string -> unit = fun fname ->
   let p = Dimacs.parse_file fname in
-  match S.solve2 p with
+  match S.solve p with
   | None -> printf "false@."
   | Some model ->
     let pp_list fmt list =
@@ -29,7 +29,7 @@ let handle_file : string -> unit = fun fname ->
 let handle_sudoku : string -> unit = fun str ->
   let sudoku, solution = Sudoku.read str in
   let env, ast = Sudoku.to_cnf sudoku in
-  match S.solve2 ast with
+  match S.solve ast with
   | None ->
     raise @@ failwith "No answer. Probably your encoding is incorrect"
   | Some model ->

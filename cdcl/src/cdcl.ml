@@ -1,15 +1,7 @@
 open Dpll
 
-module type SOLVER_CDCL = sig
-
-  (** solve takes a cnf formula and returns either None if it is unsatisfiable or
-      a model that satisfies the formula. *)
-  val solve2 : Ast.t -> Ast.model option
-end
-
-module CDCL (C:CHOICE) : SOLVER_CDCL =
+module CDCL (C:CHOICE) : SOLVER =
   struct
-    (*module S = DPLL(C)*)
     module LitSet = Set.Make(struct type t = int let compare = compare end)
     type answer = Sat of Ast.model | Unsat of Ast.Clause.t
     type history = (Ast.lit * (Ast.lit list) * int) list
@@ -39,7 +31,8 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS UNITAIRES *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let valid (clause : Ast.lab_clause) : bool = Ast.Clause.exists (fun x->x>0) clause.c
+    let contains_pos_lit (clause : Ast.lab_clause) : bool = Ast.Clause.exists (fun x->x>0) clause.c
+    let contains_neg_lit (clause : Ast.lab_clause) : bool = Ast.Clause.exists (fun x->x<0) clause.c
 
     let new_dl (instance : instance) (predecessors : Ast.lit list) : int = 
       match predecessors with 
@@ -48,8 +41,8 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
 
     let max (x:int) (y:int) : int = if (x>y) then x else y
 
-    let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists (fun clauseL -> clauseL.c=Ast.Clause.empty) instance.ast.cnf_l
-    let f_true_under_m (instance : instance) : bool = Ast.Lab_Cnf.for_all valid instance.ast.cnf_l
+    let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists (fun clauseL -> Ast.Clause.is_empty clauseL.c) instance.ast.cnf_l
+    let f_true_under_m (instance : instance) : bool = (Ast.Lab_Cnf.for_all contains_pos_lit instance.ast.cnf_l)||(Ast.Lab_Cnf.for_all contains_neg_lit instance.ast.cnf_l)
     let f_unassigned_under_m (instance : instance) : bool = not(f_false_under_m instance) && not(f_true_under_m instance)
 
     let rec contains_literal (dstack : history) (literal : Ast.lit) : bool = match dstack with
@@ -93,8 +86,8 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
 
     let add (formula : Ast.lab_t) (clause : Ast.lab_clause) : Ast.lab_t = 
       {
-        nb_var_l = max (count_vars (Ast.Lab_Cnf.elements formula.cnf_l)) (count_vars (clause::[]));
-        nb_clause_l = (Ast.Lab_Cnf.cardinal formula.cnf_l) + 1 ;
+        nb_var_l = formula.nb_var_l;
+        nb_clause_l = formula.nb_clause_l + 1 ;
         cnf_l = Ast.Lab_Cnf.add clause formula.cnf_l
       }
     
@@ -196,26 +189,21 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let solve2 (formulaInit : Ast.t) : Ast.model option = 
-      print_endline "Début de Solve";
+    let solve (formulaInit : Ast.t) : Ast.model option =
       let fInit = label formulaInit in
-      print_endline "Début de Solve2";
-      (*let f = label formulaInit in*)
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
-      let unbound_vars = List.fold_left (fun set x -> LitSet.add x set) LitSet.empty range in
+      let unbound_vars = LitSet.of_list range in
       let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
-      print_endline "Je passe simplify";
 
       let noAssignment = ref true in
       let isUnsat = ref false in
-      print_endline "Je rentre dans le grand while";
+
       while (!noAssignment && not (!isUnsat)) do
 
-        print_endline "Je rentre dans le petit While";
         (*Backtracking*)
         while (f_false_under_m !instance && not (!isUnsat)) do
           isUnsat := (!instance.dl=0);
-          if (!isUnsat = true) then () else
+          if (!isUnsat) then () else
           let clauseToLearn,dl = analyzeConflict !instance in
 
           (*Backtrack*)
@@ -227,25 +215,20 @@ module CDCL (C:CHOICE) : SOLVER_CDCL =
           !instance.ast <- find_old_formula dl !instance.oldFormulas;
 
           (*Clause Learning*)
-          (*f.nb_clause_l <- f.nb_clause_l + 1;
-          f.cnf_l <- Ast.Lab_Cnf.add clauseToLearn f.cnf_l;*)
           !instance.ast <- add !instance.ast clauseToLearn;
           instance := simplify !instance fInit;
-          done;
-        
-        print_endline "ENTRE 2";
+        done;
 
         (*Boolean Decision*)
         if (f_unassigned_under_m !instance && not (!isUnsat)) then
           begin
           !instance.dl <- !instance.dl + 1;
-          instance := make_decision(!instance); (*S'assurer que met bien à jour instance.oldFormulas*)
+          instance := make_decision(!instance);
           instance := simplify !instance fInit;
           end;
         
-        noAssignment := f_unassigned_under_m !instance || f_false_under_m !instance
-        done;
-      print_endline "Début de Solve3";
+        noAssignment := not (f_true_under_m !instance) (*f_unassigned_under_m !instance || f_false_under_m !instance*)
+      done;
       if (!isUnsat) then None else
       Some !instance.assignment
     end
