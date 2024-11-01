@@ -1,10 +1,24 @@
+module LitSet : Set.S with type elt = int
+
+type history = (Ast.lit * (Ast.lit list) * int) list
+type instance = {
+    mutable ast : Ast.lab_t;
+    mutable assignment : Ast.model;
+    mutable unbound : LitSet.t;
+    mutable decisions : history;
+    mutable dl : int;
+    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
+  }
+
+module type CHOICE = sig
+  val choice : instance -> Ast.lit
+end
+
+module DefaultChoice : CHOICE
+module ImprovedDefaultChoice : CHOICE
+module ChooseSmallClause : CHOICE
+module ChooseLargeClause : CHOICE
+
 (** Signature for a SAT solver. *)
-(*module type SOLVER_CDCL = sig
-
-    (** solve takes a cnf formula and returns either None if it is unsatisfiable or
-        a model that satisfies the formula. *)
-    val solve2 : Ast.t -> Ast.model option
-  end*)
-
 (** CDCL is a SAT solver parameterized by a choice function. *)
-module CDCL(C:Dpll.CHOICE) : Dpll.SOLVER
+module CDCL(C:CHOICE) : Dpll.SOLVER

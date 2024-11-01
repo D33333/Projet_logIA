@@ -34,7 +34,9 @@ type lab_clause = {
 module Lab_Cnf = Set.Make(
   struct type t = lab_clause
 
-  let compare c1 c2 = Clause.compare c1.c c2.c
+  let compare c1 c2 = 
+    if Clause.cardinal c1.c = Clause.cardinal c2.c then Clause.compare c1.c c2.c 
+    else compare (Clause.cardinal c1.c) (Clause.cardinal c2.c)
 end)
 
 type lab_t = {

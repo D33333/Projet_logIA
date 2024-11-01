@@ -1,18 +1,53 @@
-open Dpll
+module LitSet = Set.Make(struct type t = int let compare = compare end)
+type history = (Ast.lit * (Ast.lit list) * int) list
+type instance = {
+    mutable ast : Ast.lab_t;
+    mutable assignment : Ast.model;
+    mutable unbound : LitSet.t;
+    mutable decisions : history;
+    mutable dl : int;
+    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
+}
 
-module CDCL (C:CHOICE) : SOLVER =
+(*-----------------------------------------------------------------------------------------------------------------*)
+(* HEURISTIQUES DE DECISION *)
+(*-----------------------------------------------------------------------------------------------------------------*)
+
+module type CHOICE = sig
+  val choice : instance -> Ast.lit
+end
+
+module DefaultChoice : CHOICE = 
+struct
+  let choice instance = LitSet.choose instance.unbound
+end
+
+module ImprovedDefaultChoice : CHOICE =
+struct
+  let choice instance =
+    let var = LitSet.choose instance.unbound in
+    let clauses_with_pos = Ast.Lab_Cnf.filter (fun clause -> Ast.Clause.mem var clause.c) instance.ast.cnf_l in
+    let clauses_with_neg = Ast.Lab_Cnf.filter (fun clause -> Ast.Clause.mem (Ast.neg var) clause.c) instance.ast.cnf_l in
+    if (Ast.Lab_Cnf.cardinal clauses_with_pos) < (Ast.Lab_Cnf.cardinal clauses_with_neg) then (Ast.neg var)
+    else var
+end
+
+module ChooseSmallClause : CHOICE =
+struct
+  let choice instance =
+    let smallest_clause = Ast.Lab_Cnf.min_elt instance.ast.cnf_l
+    in Ast.Clause.choose smallest_clause.c
+end
+
+module ChooseLargeClause : CHOICE =
+struct
+  let choice instance =
+    let largest_clause = Ast.Lab_Cnf.max_elt instance.ast.cnf_l
+    in Ast.Clause.choose largest_clause.c
+end
+
+module CDCL (C:CHOICE) : Dpll.SOLVER =
   struct
-    module LitSet = Set.Make(struct type t = int let compare = compare end)
-    type answer = Sat of Ast.model | Unsat of Ast.Clause.t
-    type history = (Ast.lit * (Ast.lit list) * int) list
-    type instance = {
-      mutable ast : Ast.lab_t;
-      mutable assignment : Ast.model;
-      mutable unbound : LitSet.t;
-      mutable decisions : history;
-      mutable dl : int;
-      mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
-    }
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS POUR LE LABELING *)
     (*-----------------------------------------------------------------------------------------------------------------*)
@@ -111,7 +146,7 @@ module CDCL (C:CHOICE) : SOLVER =
       }
 
     let make_decision (instance : instance) : instance =
-      let literal = LitSet.choose instance.unbound in
+      let literal = C.choice instance in
       assign_literal instance literal []
 
     let get_unit_clauses (instance : instance) : (Ast.lit * int) list =
