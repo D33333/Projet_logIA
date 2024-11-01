@@ -175,15 +175,41 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
+      print_endline "Je rentre dans unit_prop";
       match unit_propagate instance original with
-      | [] -> begin
+      | [] -> print_endline "Je sors de unit_prop";
+        begin
+        print_endline "Je rentre dans pure_literals";
         match pure_literals instance with
-        | [] -> instance
-        | literals -> let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [] in
-          simplify (List.fold_left assign_pure instance literals) original
+        | [] -> print_endline "Je sors de pure_literals 1"; instance
+        | literals -> print_endline "Je sors de pure_literals 2";
+          let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [] in
+          let le_fold = List.fold_left assign_pure instance literals in
+          print_endline "Je sors du fold";
+          simplify le_fold original
         end
-      | assignments -> let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
+      | assignments -> print_endline "Je sors de unit_prop";
+        let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
         simplify (List.fold_left assign_unit instance assignments) original
+    
+
+    (*let search_preds_in (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
+    | [] -> []
+    | (lit, preds, dl)::reste -> if (literal=lit) then preds else search_preds_in literal reste
+    
+    let findPreds_iter (literal : Ast.lit) (dstack : history) : (Ast.lit list) =
+      let preds_root = ref [] in
+      let preds_feuille = ref literal::[] in
+      while (not (List.is_empty !preds_feuille)) do
+        let feuille = List.hd !preds_feuille;
+        preds_feuille := List.tl !preds_feuille;
+        let predecessors = search_preds_in literal dstack in
+        if (List.is_empty predecessors) then
+          preds_root := feuille::(!preds_root)
+        else
+          preds_feuille := predecessors @ (!preds_feuille)
+      done;
+      preds_root*)
     
     let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
       | [] -> [],unbound
@@ -225,18 +251,26 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
     let solve (formulaInit : Ast.t) : Ast.model option =
+      print_endline "Je rentre dans Solve";
       let fInit = label formulaInit in
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = LitSet.of_list range in
+      print_endline "AVANT SIMPLIFY";
       let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
+      print_endline "APRES SIMPLIFY";
 
       let noAssignment = ref true in
       let isUnsat = ref false in
+      (*let nb_iterations = ref 0 in *)
 
       while (!noAssignment && not (!isUnsat)) do
+        (*print_int !nb_iterations;*)
+        print_endline "...";
+        (*nb_iterations := !nb_iterations + 1;*)
 
         (*Backtracking*)
         while (f_false_under_m !instance && not (!isUnsat)) do
+          (*print_endline "Je Backtrack";*)
           isUnsat := (!instance.dl=0);
           if (!isUnsat) then () else
           let clauseToLearn,dl = analyzeConflict !instance in
