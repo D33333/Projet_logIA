@@ -131,13 +131,15 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     (*-----------------------------------------------------------------------------------------------------------------*)
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
+      print_int (Ast.Lab_Cnf.cardinal instance.ast.cnf_l) ; print_endline " Je commence assign_literal" ;
       let cnf =
         let assign_clause (clause: Ast.lab_clause) (cnf: Ast.Lab_Cnf.t) =
           if Ast.Clause.mem literal clause.c then cnf
           else Ast.Lab_Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
         in Ast.Lab_Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
+      let new_ast : Ast.lab_t = {cnf_l = cnf ; nb_clause_l = instance.ast.nb_clause_l ; nb_var_l = instance.ast.nb_var_l} in
       { 
-        ast = { instance.ast with cnf_l = cnf };
+        ast = new_ast;
         assignment = literal :: instance.assignment;
         unbound = LitSet.remove (abs literal) instance.unbound;
         decisions = (literal,predecessors,dl')::instance.decisions;
@@ -174,16 +176,38 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         in let lab_clause_union (l_clause : Ast.lab_clause) = Ast.Clause.union l_clause.c
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
+    (*let assign_pure_literals (instance : instance) (literals : Ast.lit list) : instance =
+      print_int (Ast.Lab_Cnf.cardinal instance.ast.cnf_l); print_endline " début de pure literals";
+      let rec without_pure_literal (clause : int list) (literals : Ast.lit list) : bool =
+        match clause, literals with
+        | [],_ -> true
+        | _,[] -> true
+        | l1::t1,l2::t2 when l1=l2 -> false
+        | l1::t1,l2::t2 when l1<l2 -> without_pure_literal t1 literals
+        | l1::t1,l2::t2 -> without_pure_literal clause t2
+      in 
+      {
+        ast = {
+          cnf_l = Ast.Lab_Cnf.filter (fun clause -> without_pure_literal (Ast.Clause.elements clause.c) literals) (instance.ast.cnf_l);
+          nb_clause_l = instance.ast.nb_clause_l;
+          nb_var_l = instance.ast.nb_var_l
+        } ;
+        assignment = instance.assignment @ literals;
+        unbound = LitSet.union (instance.unbound) (LitSet.of_list literals) ;
+        decisions = instance.decisions;
+        dl = instance.dl;
+        oldFormulas = instance.oldFormulas
+      }*)
+
     let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
-      print_endline "Je rentre dans unit_prop";
       match unit_propagate instance original with
-      | [] -> print_endline "Je sors de unit_prop";
+      | [] ->
         begin
-        print_endline "Je rentre dans pure_literals";
         match pure_literals instance with
-        | [] -> print_endline "Je sors de pure_literals 1"; instance
-        | literals -> print_endline "Je sors de pure_literals 2";
-          let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [] in
+        | [] -> instance
+        | literals -> (*assign_pure_literals instance literals*)
+          let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [l] in 
+          (* n'importe quel prédecesseur convient pour un litéral pure *)
           let le_fold = List.fold_left assign_pure instance literals in
           print_endline "Je sors du fold";
           simplify le_fold original
