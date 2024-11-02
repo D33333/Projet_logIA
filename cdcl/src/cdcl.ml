@@ -129,7 +129,7 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     (*-----------------------------------------------------------------------------------------------------------------*)
     (* FONCTIONS D'ACTION DE L'ALGORITHME *)
     (*-----------------------------------------------------------------------------------------------------------------*)
-    let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
+    let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : unit =
       let dl' = new_dl instance predecessors in
       print_int (Ast.Lab_Cnf.cardinal instance.ast.cnf_l) ; print_endline " Je commence assign_literal" ;
       let cnf =
@@ -138,16 +138,14 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
           else Ast.Lab_Cnf.add ({c = Ast.Clause.remove (Ast.neg literal) clause.c ; label = clause.label}) cnf
         in Ast.Lab_Cnf.fold assign_clause instance.ast.cnf_l Ast.Lab_Cnf.empty in
       let new_ast : Ast.lab_t = {cnf_l = cnf ; nb_clause_l = instance.ast.nb_clause_l ; nb_var_l = instance.ast.nb_var_l} in
-      { 
-        ast = new_ast;
-        assignment = literal :: instance.assignment;
-        unbound = LitSet.remove (abs literal) instance.unbound;
-        decisions = (literal,predecessors,dl')::instance.decisions;
-        dl = dl';
-        oldFormulas = (instance.dl,instance.ast.cnf_l)::instance.oldFormulas
-      }
+        instance.ast <- new_ast;
+        instance.assignment <- literal :: instance.assignment;
+        instance.unbound <- LitSet.remove (abs literal) instance.unbound;
+        instance.decisions <- (literal,predecessors,dl')::instance.decisions;
+        instance.dl <- dl';
+        instance.oldFormulas <- (instance.dl,instance.ast.cnf_l)::instance.oldFormulas
 
-    let make_decision (instance : instance) : instance =
+    let make_decision (instance : instance) : unit =
       let literal = C.choice instance in
       assign_literal instance literal []
 
@@ -199,21 +197,21 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         oldFormulas = instance.oldFormulas
       }*)
 
-    let rec simplify (instance : instance) (original : Ast.lab_t) : instance =
+    let rec simplify (instance : instance) (original : Ast.lab_t) : unit =
       match unit_propagate instance original with
       | [] ->
         begin
         match pure_literals instance with
-        | [] -> instance
+        | [] -> ()
         | literals -> (*assign_pure_literals instance literals*)
-          let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [l] in 
+          let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [l] ; i in 
           (* n'importe quel prédecesseur convient pour un litéral pure *)
-          let le_fold = List.fold_left assign_pure instance literals in
+          let _ = List.fold_left assign_pure instance literals in
           print_endline "Je sors du fold";
-          simplify le_fold original
+          simplify instance original
         end
       | assignments -> print_endline "Je sors de unit_prop";
-        let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
+        let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred ; i in
         simplify (List.fold_left assign_unit instance assignments) original
     
 
@@ -280,7 +278,8 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = LitSet.of_list range in
       print_endline "AVANT SIMPLIFY";
-      let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
+      let instance = { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } in
+      simplify instance fInit;
       print_endline "APRES SIMPLIFY";
 
       let noAssignment = ref true in
@@ -293,35 +292,35 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         (*nb_iterations := !nb_iterations + 1;*)
 
         (*Backtracking*)
-        while (f_false_under_m !instance && not (!isUnsat)) do
+        while (f_false_under_m instance && not (!isUnsat)) do
           (*print_endline "Je Backtrack";*)
-          isUnsat := (!instance.dl=0);
+          isUnsat := (instance.dl=0);
           if (!isUnsat) then () else
-          let clauseToLearn,dl = analyzeConflict !instance in
+          let clauseToLearn,dl = analyzeConflict instance in
 
           (*Backtrack*)
-          !instance.dl <- dl;
-          let decisions',unbound' = go_back_to dl !instance.decisions !instance.unbound in
-          !instance.decisions <- decisions';
-          !instance.unbound <- unbound';
-          !instance.assignment <- update_model !instance.decisions;
-          !instance.ast <- find_old_formula dl !instance.oldFormulas;
+          instance.dl <- dl;
+          let decisions',unbound' = go_back_to dl instance.decisions instance.unbound in
+          instance.decisions <- decisions';
+          instance.unbound <- unbound';
+          instance.assignment <- update_model instance.decisions;
+          instance.ast <- find_old_formula dl instance.oldFormulas;
 
           (*Clause Learning*)
-          !instance.ast <- add !instance.ast clauseToLearn;
-          instance := simplify !instance fInit;
+          instance.ast <- add instance.ast clauseToLearn;
+          simplify instance fInit;
         done;
 
         (*Boolean Decision*)
-        if (f_unassigned_under_m !instance && not (!isUnsat)) then
+        if (f_unassigned_under_m instance && not (!isUnsat)) then
           begin
-          !instance.dl <- !instance.dl + 1;
-          instance := make_decision(!instance);
-          instance := simplify !instance fInit;
+          instance.dl <- instance.dl + 1;
+          make_decision(instance);
+          simplify instance fInit;
           end;
         
-        noAssignment := not (f_true_under_m !instance) (*f_unassigned_under_m !instance || f_false_under_m !instance*)
+        noAssignment := not (f_true_under_m instance) (*f_unassigned_under_m !instance || f_false_under_m !instance*)
       done;
       if (!isUnsat) then None else
-      Some !instance.assignment
+      Some instance.assignment
     end
