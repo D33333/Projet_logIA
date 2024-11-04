@@ -81,6 +81,11 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     let f_true_under_m (instance : instance) : bool = (Ast.Lab_Cnf.for_all contains_pos_lit instance.ast.cnf_l)||(Ast.Lab_Cnf.for_all contains_neg_lit instance.ast.cnf_l)
     let f_unassigned_under_m (instance : instance) : bool = not(f_false_under_m instance) && not(f_true_under_m instance)
 
+    let get_model (instance : instance) : Ast.model =
+      let unbound_var = LitSet.elements instance.unbound in
+      if (Ast.Lab_Cnf.for_all contains_pos_lit instance.ast.cnf_l) then unbound_var @ instance.assignment
+      else (List.map (Ast.neg) unbound_var) @ (instance.assignment)
+
     let rec contains_literal (dstack : history) (literal : Ast.lit) : bool = match dstack with
     (*Renvoie vrai si le litéral est dans la dstack*)
     | [] -> false
@@ -244,7 +249,7 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
-    let analyzeConflict (instance : instance) : Ast.lab_clause*int = 
+    let analyzeConflict (instance : instance) : Ast.lab_clause * int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
       | lit::reste -> let conflict = findParentConflict (lit::reste) instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
@@ -299,5 +304,5 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         noAssignment := not (f_true_under_m !instance)
       done;
       if (!isUnsat) then None else
-      Some !instance.assignment
+      Some (get_model !instance)
     end
