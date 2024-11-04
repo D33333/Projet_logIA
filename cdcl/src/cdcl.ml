@@ -227,13 +227,13 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
 
     let rec findPreds (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
     | [] -> []
-    | (lit, preds, dl)::reste ->
-        if (literal=lit) then findPredsPreds preds
-        else findPreds literal reste
-    and findPredsPreds (predecessors : Ast.lit list) = match predecessors with
-    | [] -> literal::[]
-    | pred::autres -> let predLit = findPreds pred dstack in 
-      let predsLit = findPredsPreds autres in predLit @ predsLit 
+    | (lit, preds, dl)::reste -> if (literal=lit) then 
+      let rec findPredsPreds (predecessors : Ast.lit list) = match predecessors with
+        | [] -> literal::[]
+        | pred::autres -> let predLit = findPreds pred dstack in 
+          let predsLit = findPredsPreds autres in predLit @ predsLit in
+          findPredsPreds preds
+      else findPreds literal reste
 
     let rec findParentConflict (conflictLit : Ast.lit list) (dstack : history) : (Ast.lit list) = match conflictLit with
     | [] -> []
