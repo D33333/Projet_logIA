@@ -6,7 +6,7 @@ type instance = {
     mutable unbound : LitSet.t;
     mutable decisions : history;
     mutable dl : int;
-    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* (int * Ast.lab_t) list ? *)
+    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list
 }
 
 (*-----------------------------------------------------------------------------------------------------------------*)
@@ -79,6 +79,11 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     let f_false_under_m (instance : instance) : bool = Ast.Lab_Cnf.exists (fun clauseL -> Ast.Clause.is_empty clauseL.c) instance.ast.cnf_l
     let f_true_under_m (instance : instance) : bool = (Ast.Lab_Cnf.for_all contains_pos_lit instance.ast.cnf_l)||(Ast.Lab_Cnf.for_all contains_neg_lit instance.ast.cnf_l)
     let f_unassigned_under_m (instance : instance) : bool = not(f_false_under_m instance) && not(f_true_under_m instance)
+
+    let get_model (instance : instance) : Ast.model =
+      let unbound_var = LitSet.elements instance.unbound in
+      if (Ast.Lab_Cnf.for_all contains_pos_lit instance.ast.cnf_l) then unbound_var @ instance.assignment
+      else (List.map (Ast.neg) unbound_var) @ (instance.assignment)
 
     let rec contains_literal (dstack : history) (literal : Ast.lit) : bool = match dstack with
     | [] -> false
@@ -206,34 +211,11 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         match pure_literals instance with
         | [] -> instance
         | literals -> simplify (assign_pure_literals instance literals) original
-          (*let assign_pure (i : instance) (l : Ast.lit) : instance = assign_literal i l [l] in 
-          (* n'importe quel prédecesseur convient pour un litéral pure *)
-          let le_fold = List.fold_left assign_pure instance literals in
-          print_endline "Je sors du fold";
-          simplify le_fold original*)
         end
       | assignments -> print_endline "Je sors de unit_prop";
         let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
         simplify (List.fold_left assign_unit instance assignments) original
     
-
-    (*let search_preds_in (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
-    | [] -> []
-    | (lit, preds, dl)::reste -> if (literal=lit) then preds else search_preds_in literal reste
-    
-    let findPreds_iter (literal : Ast.lit) (dstack : history) : (Ast.lit list) =
-      let preds_root = ref [] in
-      let preds_feuille = ref literal::[] in
-      while (not (List.is_empty !preds_feuille)) do
-        let feuille = List.hd !preds_feuille;
-        preds_feuille := List.tl !preds_feuille;
-        let predecessors = search_preds_in literal dstack in
-        if (List.is_empty predecessors) then
-          preds_root := feuille::(!preds_root)
-        else
-          preds_feuille := predecessors @ (!preds_feuille)
-      done;
-      preds_root*)
     
     let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
       | [] -> [],unbound
@@ -285,16 +267,10 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
 
       let noAssignment = ref true in
       let isUnsat = ref false in
-      (*let nb_iterations = ref 0 in *)
 
       while (!noAssignment && not (!isUnsat)) do
-        (*print_int !nb_iterations;*)
-        print_endline "...";
-        (*nb_iterations := !nb_iterations + 1;*)
-
         (*Backtracking*)
         while (f_false_under_m !instance && not (!isUnsat)) do
-          (*print_endline "Je Backtrack";*)
           isUnsat := (!instance.dl=0);
           if (!isUnsat) then () else
           let clauseToLearn,dl = analyzeConflict !instance in
@@ -320,8 +296,8 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
           instance := simplify !instance fInit;
           end;
         
-        noAssignment := not (f_true_under_m !instance) (*f_unassigned_under_m !instance || f_false_under_m !instance*)
+        noAssignment := not (f_true_under_m !instance)
       done;
       if (!isUnsat) then None else
-      Some !instance.assignment
+      Some (get_model !instance)
     end
