@@ -2,11 +2,11 @@ module LitSet = Set.Make(struct type t = int let compare = compare end)
 type history = (Ast.lit * (Ast.lit list) * int) list
 type instance = {
     mutable ast : Ast.lab_t;
-    mutable assignment : Ast.model;
-    mutable unbound : LitSet.t;
-    mutable decisions : history;
-    mutable dl : int;
-    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list
+    mutable assignment : Ast.model; (* the formula *)
+    mutable unbound : LitSet.t; (* unbound variables *)
+    mutable decisions : history; (* dstack *)
+    mutable dl : int; (* decision level *)
+    mutable oldFormulas : (int * Ast.Lab_Cnf.t) list (* used for backtracking *)
 }
 
 (*-----------------------------------------------------------------------------------------------------------------*)
@@ -49,9 +49,10 @@ end
 module CDCL (C:CHOICE) : Dpll.SOLVER =
   struct
     (*-----------------------------------------------------------------------------------------------------------------*)
-    (* FONCTIONS POUR LE LABELING *)
+    (* FONCTION POUR LE LABELLING *)
     (*-----------------------------------------------------------------------------------------------------------------*)
     let label (f : Ast.t) : Ast.lab_t =
+      (* associe un unique label à chaque clause *)
       let rec label_aux (elts : Ast.Clause.t list) (acc : int) : Ast.Lab_Cnf.t =
         match elts with
           | [] -> Ast.Lab_Cnf.empty
@@ -89,10 +90,6 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     | [] -> false
     | (x,_,_)::reste -> (x=literal) || (contains_literal reste literal)
 
-    let rec contains (litList : Ast.lit list) (literal : Ast.lit) : bool = match litList with
-    | [] -> false
-    | lit::reste -> if (literal=lit) then true else contains reste literal
-
     let rec update_model (dstack : history) : Ast.model = match dstack with
     | [] -> []
     | (lit, preds, dl)::reste -> lit::(update_model reste)
@@ -100,7 +97,7 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     let rec findMaxDl (preds : Ast.lit list) (dstack : history) : int = match dstack with
     | [] -> 0
     | (lit, predecessors, dl)::reste -> let maxOldDl = findMaxDl preds reste in
-      if (contains preds lit) then max dl maxOldDl
+      if (List.mem lit preds) then max dl maxOldDl
       else maxOldDl
 
     let rec max_vars (clause : int list) : int = match clause with
@@ -136,7 +133,6 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     (*-----------------------------------------------------------------------------------------------------------------*)
     let assign_literal (instance : instance) (literal : Ast.lit) (predecessors : Ast.lit list) : instance =
       let dl' = new_dl instance predecessors in
-      print_int (Ast.Lab_Cnf.cardinal instance.ast.cnf_l) ; print_endline " Je commence assign_literal" ;
       let cnf =
         let assign_clause (clause: Ast.lab_clause) (cnf: Ast.Lab_Cnf.t) =
           if Ast.Clause.mem literal clause.c then cnf
@@ -182,7 +178,6 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         in filter_pure_literal (Ast.Clause.elements (Ast.Lab_Cnf.fold lab_clause_union instance.ast.cnf_l Ast.Clause.empty))
 
     let assign_pure_literals (instance : instance) (literals : Ast.lit list) : instance =
-      print_int (Ast.Lab_Cnf.cardinal instance.ast.cnf_l); print_endline " début de pure literals";
       let rec without_pure_literal (clause : int list) (literals : Ast.lit list) : bool =
         match clause, literals with
         | [],_ -> true
@@ -212,37 +207,39 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
         | [] -> instance
         | literals -> simplify (assign_pure_literals instance literals) original
         end
-      | assignments -> print_endline "Je sors de unit_prop";
+      | assignments ->
         let assign_unit (i : instance) ((l,pred) : Ast.lit * (Ast.lit list)) : instance = assign_literal i l pred in
         simplify (List.fold_left assign_unit instance assignments) original
     
     
-    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = match dstack with
+    let rec go_back_to (dl : int) (dstack : history) (unbound : LitSet.t) : history * LitSet.t = 
+      (* effectue le backtrack *)
+      match dstack with
       | [] -> [],unbound
       | (lit,preds,dl')::reste -> let dstack',unbound' = go_back_to dl reste unbound in
       if (dl' > dl) then dstack',(LitSet.add lit unbound')
       else (lit,preds,dl')::dstack',unbound'
 
     let rec find_preds_of_bottom (dstack : history) : (Ast.lit list) = match dstack with
-    | (0, preds, -1)::reste -> preds (*Noeud bottom => clause vide*)
-    | (lit, preds, dl)::reste -> find_preds_of_bottom reste (*On cherche bottom*)
+    | (0, preds, -1)::reste -> preds
+    | (lit, preds, dl)::reste -> find_preds_of_bottom reste
     | _ -> failwith "There is no empty clause in the stack."
 
     let rec findPreds (literal : Ast.lit) (dstack : history) : (Ast.lit list) = match dstack with
     | [] -> []
-    | (lit, preds, dl)::reste -> if (literal=lit) then 
-      let rec findPredsPreds (predecessors : Ast.lit list) = match predecessors with
-        | [] -> literal::[]
-        | pred::autres -> let predLit = findPreds pred dstack in 
-          let predsLit = findPredsPreds autres in predLit @ predsLit in
-          findPredsPreds preds
-      else findPreds literal reste
+    | (lit, preds, dl)::reste ->
+        if (literal=lit) then findPredsPreds preds
+        else findPreds literal reste
+    and findPredsPreds (predecessors : Ast.lit list) = match predecessors with
+    | [] -> literal::[]
+    | pred::autres -> let predLit = findPreds pred dstack in 
+      let predsLit = findPredsPreds autres in predLit @ predsLit 
 
     let rec findParentConflict (conflictLit : Ast.lit list) (dstack : history) : (Ast.lit list) = match conflictLit with
     | [] -> []
     | lit::reste -> (findPreds lit dstack) @ (findParentConflict reste dstack)
 
-    let analyzeConflict (instance : instance) : Ast.lab_clause*int = 
+    let analyzeConflict (instance : instance) : Ast.lab_clause * int = 
       let predsBottom = find_preds_of_bottom instance.decisions in
       match predsBottom with
       | lit::reste -> let conflict = findParentConflict (lit::reste) instance.decisions in (*on obtient une liste de littéraux négatifs (ce sont des et entre eux)*)
@@ -257,13 +254,10 @@ module CDCL (C:CHOICE) : Dpll.SOLVER =
     (* FONCTION SOLVE DE CDCL *)
     (*-----------------------------------------------------------------------------------------------------------------*)
     let solve (formulaInit : Ast.t) : Ast.model option =
-      print_endline "Je rentre dans Solve";
       let fInit = label formulaInit in
       let range = List.init formulaInit.nb_var (fun x -> x + 1) in
       let unbound_vars = LitSet.of_list range in
-      print_endline "AVANT SIMPLIFY";
       let instance = ref (simplify { ast = fInit; assignment = []; unbound = unbound_vars; decisions = []; dl = 0; oldFormulas = [] } fInit) in
-      print_endline "APRES SIMPLIFY";
 
       let noAssignment = ref true in
       let isUnsat = ref false in
